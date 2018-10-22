@@ -1021,13 +1021,22 @@ public class WorkflowServiceImpl extends AbstractIndexProducer implements Workfl
 
   private void removeTempFiles(WorkflowInstance workflowInstance) throws WorkflowDatabaseException,
           UnauthorizedException, NotFoundException {
-    logger.info("Removing temporary files for workflow %s", workflowInstance);
+    logger.info("Removing temporary files for workflow {}", workflowInstance);
+    if (null == workflowInstance.getMediaPackage()) {
+      logger.warn("Workflow instance {} does not have an media package set", workflowInstance.getId());
+      return;
+    }
     for (MediaPackageElement elem : workflowInstance.getMediaPackage().getElements()) {
+      if (null == elem.getURI()) {
+        logger.warn("Mediapackage element {} from the media package {} does not have an URI set",
+                elem.getIdentifier(), workflowInstance.getMediaPackage().getIdentifier().compact());
+        continue;
+      }
       try {
-        logger.debug("Removing temporary file %s for workflow %s", elem.getURI(), workflowInstance);
+        logger.debug("Removing temporary file {} for workflow {}", elem.getURI(), workflowInstance);
         workspace.delete(elem.getURI());
       } catch (IOException e) {
-        logger.warn("Unable to delete mediapackage element ", e);
+        logger.warn("Unable to delete mediapackage element", e);
       } catch (NotFoundException e) {
         // File was probably already deleted before...
       }
@@ -1388,8 +1397,15 @@ public class WorkflowServiceImpl extends AbstractIndexProducer implements Workfl
       // Update both workflow and workflow job
       try {
         job = serviceRegistry.updateJob(job);
-        messageSender.sendObjectMessage(WorkflowItem.WORKFLOW_QUEUE, MessageSender.DestinationType.Queue,
-                WorkflowItem.updateInstance(workflowInstance));
+
+        WorkflowOperationInstance op = workflowInstance.getCurrentOperation();
+
+        // Update index used for UI. Note that we only need certain metadata and we can safely filter out workflow
+        // updates for running operations since we updated the metadata right before these operations and will do so
+        // again right after those operations.
+        if (op == null || op.getState() != OperationState.RUNNING) {
+          messageSender.sendObjectMessage(WorkflowItem.WORKFLOW_QUEUE, MessageSender.DestinationType.Queue, WorkflowItem.updateInstance(workflowInstance));
+        }
         index(workflowInstance);
       } catch (ServiceRegistryException e) {
         logger.error(
