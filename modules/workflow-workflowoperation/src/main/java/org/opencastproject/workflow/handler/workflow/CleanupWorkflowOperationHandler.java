@@ -53,6 +53,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -109,7 +110,7 @@ public class CleanupWorkflowOperationHandler extends AbstractWorkflowOperationHa
   public void cleanUpJobArgument(WorkflowInstance workflowInstance) {
     List<WorkflowOperationInstance> operationInstances = workflowInstance.getOperations();
     for (WorkflowOperationInstance operationInstance : operationInstances) {
-      logger.debug("Delete JobArguments for Job id from Workflowinstance" + operationInstance.getId());
+      logger.debug("Delete job arguments for jobs related to workflow operation {}", operationInstance.getId());
 
       // delete job Arguments
       Long operationInstanceId = null;
@@ -118,21 +119,20 @@ public class CleanupWorkflowOperationHandler extends AbstractWorkflowOperationHa
         // instanceId can be null if the operation never run
         if (operationInstanceId != null) {
           Job operationInstanceJob = (serviceRegistry.getJob(operationInstanceId));
-          List<String> list = new ArrayList<>();
-          operationInstanceJob.setArguments(list);
+          operationInstanceJob.setArguments(Collections.emptyList());
           serviceRegistry.updateJob(operationInstanceJob);
 
           List<Job> jobs = serviceRegistry.getChildJobs(operationInstanceId);
           for (Job job : jobs) {
             if (job.getStatus() == Job.Status.FINISHED) {
-              logger.debug("Deleting Arguments:  " + job.getArguments());
-              job.setArguments(list);
+              logger.debug("Deleting job arguments: {}", job.getArguments());
+              job.setArguments(Collections.emptyList());
               serviceRegistry.updateJob(job);
             }
           }
         }
       } catch (ServiceRegistryException | NotFoundException ex) {
-        logger.error("Deleting JobArguments failed for Job {}: {} ", operationInstanceId, ex);
+        logger.error("Deleting job arguments failed for job {}", operationInstanceId, ex);
       }
     }
   }
@@ -153,7 +153,7 @@ public class CleanupWorkflowOperationHandler extends AbstractWorkflowOperationHa
     WorkflowOperationInstance currentOperation = workflowInstance.getCurrentOperation();
 
     String flavors = currentOperation.getConfiguration(PRESERVE_FLAVOR_PROPERTY);
-    final List<MediaPackageElementFlavor> flavorsToPreserve = new ArrayList<MediaPackageElementFlavor>();
+    final List<MediaPackageElementFlavor> flavorsToPreserve = new ArrayList<>();
 
     boolean deleteExternal = BooleanUtils.toBoolean(currentOperation.getConfiguration(DELETE_EXTERNAL));
 
@@ -171,7 +171,7 @@ public class CleanupWorkflowOperationHandler extends AbstractWorkflowOperationHa
     if (delay > 0) {
       try {
         logger.debug("Sleeping {}s before removing workflow files", delay);
-        Thread.sleep(delay * 1000);
+        Thread.sleep(delay * 1000L);
       } catch (InterruptedException e) {
         // ignore
       }
@@ -216,10 +216,10 @@ public class CleanupWorkflowOperationHandler extends AbstractWorkflowOperationHa
         workspace.delete(elementToRemove.getURI());
       } catch (NotFoundException ex) {
         logger.debug("Workspace doesn't contain element with Id '{}' from media package '{}': {}",
-                elementToRemove.getIdentifier(), mediaPackage.getIdentifier().compact(), ex.getMessage());
+                elementToRemove.getIdentifier(), mediaPackage.getIdentifier().toString(), ex.getMessage());
       } catch (IOException ex) {
         logger.warn("Unable to remove element with Id '{}' from the media package '{}': {}",
-                elementToRemove.getIdentifier(), mediaPackage.getIdentifier().compact(), ex.getMessage());
+                elementToRemove.getIdentifier(), mediaPackage.getIdentifier().toString(), ex.getMessage());
       }
     }
     return createResult(mediaPackage, Action.CONTINUE);
@@ -267,9 +267,9 @@ public class CleanupWorkflowOperationHandler extends AbstractWorkflowOperationHa
     String elementUri = elementToRemove.getURI().toString();
     String deleteUri;
     if (StringUtils.containsIgnoreCase(elementUri, UrlSupport.concat(WorkingFileRepository.MEDIAPACKAGE_PATH_PREFIX,
-              elementToRemove.getMediaPackage().getIdentifier().compact(), elementToRemove.getIdentifier()))) {
+              elementToRemove.getMediaPackage().getIdentifier().toString(), elementToRemove.getIdentifier()))) {
       deleteUri = UrlSupport.concat(repositoryBaseUrl, WorkingFileRepository.MEDIAPACKAGE_PATH_PREFIX,
-              elementToRemove.getMediaPackage().getIdentifier().compact(), elementToRemove.getIdentifier());
+              elementToRemove.getMediaPackage().getIdentifier().toString(), elementToRemove.getIdentifier());
     } else if (StringUtils.containsIgnoreCase(elementUri, WorkingFileRepository.COLLECTION_PATH_PREFIX)) {
       deleteUri = UrlSupport.concat(repositoryBaseUrl, WorkingFileRepository.COLLECTION_PATH_PREFIX,
           StringUtils.substringAfter(elementToRemove.getURI().getPath(), WorkingFileRepository.COLLECTION_PATH_PREFIX));
@@ -284,14 +284,18 @@ public class CleanupWorkflowOperationHandler extends AbstractWorkflowOperationHa
       response = client.execute(delete);
       int statusCode = response.getStatusLine().getStatusCode();
       if (statusCode == HttpStatus.SC_NO_CONTENT || statusCode == HttpStatus.SC_OK) {
-        logger.info("Sucessfully deleted external URI {}", delete.getURI());
+        logger.info("Successfully deleted external URI {}", delete.getURI());
       } else if (statusCode == HttpStatus.SC_NOT_FOUND) {
         logger.info("External URI {} has already been deleted", delete.getURI());
       } else {
         logger.info("Unable to delete external URI {}, status code '{}' returned", delete.getURI(), statusCode);
       }
     } finally {
-      client.close(response);
+      try {
+        client.close(response);
+      } catch (IOException e) {
+        // ignore
+      }
     }
   }
 }

@@ -1,15 +1,15 @@
-SelectStreamsWorkflowOperationHandler
+SelectTracksWorkflowOperationHandler
 ====================================
 
 
 Description
 -----------
 
-The SelectStreamsWorkflowOperationHandler can be used in case not all source streams should be processed. For example,
+The SelectTracksWorkflowOperationHandler can be used in case not all source tracks should be processed. For example,
 given a recording with a presenter and a presentation track, the final recording to be published should only include the
 video stream of the presenter track and the audio stream of the presentation track.
 
-The workflow operation will use workflow properties set by the Opencast video editor to determine which streams should be
+The workflow operation will use workflow properties set by the Opencast video editor to determine which tracks should be
 selected for further processing and add them to the media package based on `target-flavor` and `target-tags`.
 
 **IMPORTANT:** The input tracks need to be inspected using the workflow operation [inspect](inspect-woh.md) before
@@ -90,9 +90,9 @@ This workflow operation handler depends on the presence of the following encodin
 
 Name            | Description
 ----------------|------------
-video-only.work | Removes all audio streams from a media track
-audio-only.work | Removes all video streams from a media track
-mux-av.work     | Mux a video stream and an audio stream into a media track
+video-only.copy | Removes all audio streams from a media track
+audio-only.copy | Removes all video streams from a media track
+mux-av.copy     | Mux a video stream and an audio stream into a media track
 
 Note that those encoding profiles are included in the default configuration of Opencast.
 

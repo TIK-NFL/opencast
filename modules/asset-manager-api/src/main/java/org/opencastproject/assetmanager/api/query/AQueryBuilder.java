@@ -72,6 +72,9 @@ public interface AQueryBuilder {
   /** Create a predicate to match an snapshot's media package ID. */
   Predicate mediaPackageId(String mpId);
 
+  /** Get the snapshot's "mediaPackageId" field. Use it to create a predicate. */
+  Field<String> mediapackageId();
+
   /** Get the snapshot's "seriesId" field. Use it to create a predicate. */
   Field<String> seriesId();
 
@@ -91,11 +94,6 @@ public interface AQueryBuilder {
   Predicate availability(Availability availability);
 
   Predicate storage(String storage);
-
-  /** Get the snapshots's "availability" field. Use it to create a predicate. */
-  Field<Availability> availability();
-
-  Field<String> storage();
 
   /** Create a predicate that matches all snapshots with properties of the given namespace. */
   Predicate hasPropertiesOf(String namespace);
@@ -152,12 +150,6 @@ public interface AQueryBuilder {
    * The zero element of {@link Target}. Selecting nothing just selects nothing.
    */
   Target nothing();
-
-  /**
-   * The zero element of {@link Field}.
-   * Using zero in a predicate expression yields an {@link #always()} predicate.
-   */
-  Field zero();
 
   /**
    * The zero element of {@link Predicate}.

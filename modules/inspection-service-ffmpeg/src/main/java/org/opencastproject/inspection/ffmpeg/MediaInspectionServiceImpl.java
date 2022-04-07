@@ -37,9 +37,11 @@ import org.opencastproject.serviceregistry.api.ServiceRegistryException;
 import org.opencastproject.util.LoadUtil;
 import org.opencastproject.workspace.api.Workspace;
 
-import org.osgi.service.cm.ConfigurationException;
-import org.osgi.service.cm.ManagedService;
 import org.osgi.service.component.ComponentContext;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Modified;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,7 +52,15 @@ import java.util.List;
 import java.util.Map;
 
 /** Inspects media via ffprobe. */
-public class MediaInspectionServiceImpl extends AbstractJobProducer implements MediaInspectionService, ManagedService {
+@Component(
+  property = {
+    "service.description=Media Inspection Service",
+    "service.pid=org.opencastproject.inspection.ffmpeg.MediaInspectionServiceImpl"
+  },
+  immediate = true,
+  service = { MediaInspectionService.class }
+)
+public class MediaInspectionServiceImpl extends AbstractJobProducer implements MediaInspectionService {
 
   /** The load introduced on the system by creating an inspect job */
   public static final float DEFAULT_INSPECT_JOB_LOAD = 0.2f;
@@ -91,6 +101,7 @@ public class MediaInspectionServiceImpl extends AbstractJobProducer implements M
   }
 
   @Override
+  @Activate
   public void activate(ComponentContext cc) {
     super.activate(cc);
     /* Configure analyzer */
@@ -106,16 +117,18 @@ public class MediaInspectionServiceImpl extends AbstractJobProducer implements M
     inspector = new MediaInspector(workspace, ffprobeBinary);
   }
 
-  @Override
-  @SuppressWarnings("rawtypes")
-  public void updated(Dictionary properties) throws ConfigurationException {
-    if (properties == null)
+  @Modified
+  public void modified(ComponentContext cc) {
+    Dictionary<String, Object> properties = cc.getProperties();
+    if (properties == null) {
+      logger.info("No configuration available, using defaults");
       return;
-
+    }
     inspectJobLoad = LoadUtil.getConfiguredLoadValue(properties, INSPECT_JOB_LOAD_KEY, DEFAULT_INSPECT_JOB_LOAD,
             serviceRegistry);
     enrichJobLoad = LoadUtil.getConfiguredLoadValue(properties, ENRICH_JOB_LOAD_KEY, DEFAULT_ENRICH_JOB_LOAD,
             serviceRegistry);
+    logger.info("Configuration updated");
   }
 
   /**
@@ -214,11 +227,13 @@ public class MediaInspectionServiceImpl extends AbstractJobProducer implements M
     }
   }
 
+  @Reference(name = "workspace")
   protected void setWorkspace(Workspace workspace) {
     logger.debug("setting " + workspace);
     this.workspace = workspace;
   }
 
+  @Reference(name = "serviceRegistry")
   protected void setServiceRegistry(ServiceRegistry jobManager) {
     this.serviceRegistry = jobManager;
   }
@@ -239,6 +254,7 @@ public class MediaInspectionServiceImpl extends AbstractJobProducer implements M
    * @param securityService
    *          the securityService to set
    */
+  @Reference(name = "security-service")
   public void setSecurityService(SecurityService securityService) {
     this.securityService = securityService;
   }
@@ -249,6 +265,7 @@ public class MediaInspectionServiceImpl extends AbstractJobProducer implements M
    * @param userDirectoryService
    *          the userDirectoryService to set
    */
+  @Reference(name = "user-directory")
   public void setUserDirectoryService(UserDirectoryService userDirectoryService) {
     this.userDirectoryService = userDirectoryService;
   }
@@ -259,6 +276,7 @@ public class MediaInspectionServiceImpl extends AbstractJobProducer implements M
    * @param organizationDirectory
    *          the organization directory
    */
+  @Reference(name = "orgDirectory")
   public void setOrganizationDirectoryService(OrganizationDirectoryService organizationDirectory) {
     this.organizationDirectoryService = organizationDirectory;
   }

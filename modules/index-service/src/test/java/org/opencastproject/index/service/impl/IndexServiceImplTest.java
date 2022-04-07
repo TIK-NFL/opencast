@@ -27,20 +27,18 @@ import static org.junit.Assert.assertTrue;
 import org.opencastproject.assetmanager.api.AssetManager;
 import org.opencastproject.assetmanager.api.Property;
 import org.opencastproject.capture.admin.api.CaptureAgentStateService;
-import org.opencastproject.index.service.catalog.adapter.DublinCoreMetadataCollection;
-import org.opencastproject.index.service.catalog.adapter.MetadataList;
+import org.opencastproject.elasticsearch.api.SearchIndexException;
+import org.opencastproject.elasticsearch.api.SearchQuery;
+import org.opencastproject.elasticsearch.api.SearchResult;
+import org.opencastproject.elasticsearch.impl.SearchResultImpl;
+import org.opencastproject.elasticsearch.impl.SearchResultItemImpl;
+import org.opencastproject.elasticsearch.index.ElasticsearchIndex;
+import org.opencastproject.elasticsearch.index.objects.event.Event;
+import org.opencastproject.elasticsearch.index.objects.event.EventSearchQuery;
 import org.opencastproject.index.service.catalog.adapter.events.CommonEventCatalogUIAdapter;
 import org.opencastproject.index.service.exception.IndexServiceException;
-import org.opencastproject.index.service.impl.index.AbstractSearchIndex;
-import org.opencastproject.index.service.impl.index.event.Event;
-import org.opencastproject.index.service.impl.index.event.EventSearchQuery;
 import org.opencastproject.ingest.api.IngestException;
 import org.opencastproject.ingest.api.IngestService;
-import org.opencastproject.matterhorn.search.SearchIndexException;
-import org.opencastproject.matterhorn.search.SearchQuery;
-import org.opencastproject.matterhorn.search.SearchResult;
-import org.opencastproject.matterhorn.search.impl.SearchResultImpl;
-import org.opencastproject.matterhorn.search.impl.SearchResultItemImpl;
 import org.opencastproject.mediapackage.Attachment;
 import org.opencastproject.mediapackage.Catalog;
 import org.opencastproject.mediapackage.CatalogImpl;
@@ -55,9 +53,10 @@ import org.opencastproject.mediapackage.identifier.Id;
 import org.opencastproject.mediapackage.identifier.IdImpl;
 import org.opencastproject.metadata.dublincore.DublinCore;
 import org.opencastproject.metadata.dublincore.DublinCoreCatalog;
+import org.opencastproject.metadata.dublincore.DublinCoreMetadataCollection;
 import org.opencastproject.metadata.dublincore.DublinCores;
-import org.opencastproject.metadata.dublincore.MetadataCollection;
 import org.opencastproject.metadata.dublincore.MetadataField;
+import org.opencastproject.metadata.dublincore.MetadataList;
 import org.opencastproject.scheduler.api.SchedulerException;
 import org.opencastproject.scheduler.api.SchedulerService;
 import org.opencastproject.scheduler.api.Util;
@@ -209,13 +208,13 @@ public class IndexServiceImplTest {
     return securityService;
   }
 
-  private Tuple<CommonEventCatalogUIAdapter, VCell<Option<MetadataCollection>>> setupCommonCatalogUIAdapter(
+  private Tuple<CommonEventCatalogUIAdapter, VCell<Option<DublinCoreMetadataCollection>>> setupCommonCatalogUIAdapter(
           Workspace workspace) throws org.osgi.service.cm.ConfigurationException {
     // Create Common Event Catalog UI Adapter
-    final VCell<Option<MetadataCollection>> metadataCell = VCell.ocell();
+    final VCell<Option<DublinCoreMetadataCollection>> metadataCell = VCell.ocell();
     CommonEventCatalogUIAdapter commonEventCatalogUIAdapter = new CommonEventCatalogUIAdapter() {
       @Override
-      public Catalog storeFields(MediaPackage mediaPackage, MetadataCollection metadata) {
+      public Catalog storeFields(MediaPackage mediaPackage, DublinCoreMetadataCollection metadata) {
         metadataCell.set(Option.some(metadata));
         return super.storeFields(mediaPackage, metadata);
       }
@@ -383,7 +382,6 @@ public class IndexServiceImplTest {
     IndexServiceImpl indexServiceImpl = new IndexServiceImpl();
     indexServiceImpl.setAuthorizationService(setupAuthorizationService(mediapackage));
     indexServiceImpl.setIngestService(ingestService);
-    indexServiceImpl.setCommonEventCatalogUIAdapter(commonEventCatalogUIAdapter);
     indexServiceImpl.addCatalogUIAdapter(commonEventCatalogUIAdapter);
     indexServiceImpl.setUserDirectoryService(noUsersUserDirectoryService);
     indexServiceImpl.setSecurityService(securityService);
@@ -470,7 +468,6 @@ public class IndexServiceImplTest {
     IndexServiceImpl indexServiceImpl = new IndexServiceImpl();
     indexServiceImpl.setAuthorizationService(setupAuthorizationService(mediapackage));
     indexServiceImpl.setIngestService(ingestService);
-    indexServiceImpl.setCommonEventCatalogUIAdapter(commonEventCatalogUIAdapter);
     indexServiceImpl.addCatalogUIAdapter(commonEventCatalogUIAdapter);
     indexServiceImpl.setUserDirectoryService(noUsersUserDirectoryService);
     indexServiceImpl.setSecurityService(securityService);
@@ -563,7 +560,6 @@ public class IndexServiceImplTest {
     IndexServiceImpl indexServiceImpl = new IndexServiceImpl();
     indexServiceImpl.setAuthorizationService(setupAuthorizationService(mediapackage));
     indexServiceImpl.setIngestService(ingestService);
-    indexServiceImpl.setCommonEventCatalogUIAdapter(commonEventCatalogUIAdapter);
     indexServiceImpl.addCatalogUIAdapter(commonEventCatalogUIAdapter);
     indexServiceImpl.setSecurityService(securityService);
     indexServiceImpl.setUserDirectoryService(noUsersUserDirectoryService);
@@ -571,7 +567,7 @@ public class IndexServiceImplTest {
     indexServiceImpl.setCaptureAgentStateService(captureAgentStateService);
     indexServiceImpl.setSchedulerService(schedulerService);
     String scheduledEvent = indexServiceImpl.createEvent(metadataJson, mediapackage);
-    Assert.assertEquals(mediapackage.getIdentifier().compact(), scheduledEvent);
+    Assert.assertEquals(mediapackage.getIdentifier().toString(), scheduledEvent);
 
     assertTrue("The catalog must be added to the mediapackage", result.hasCaptured());
     assertEquals("The catalog should have been added to the correct mediapackage", mpId.toString(),
@@ -710,7 +706,7 @@ public class IndexServiceImplTest {
                 Map<String, Period> mapping = new LinkedHashMap<>();
                 int counter = 0;
                 for (Period p : periods) {
-                  mapping.put(new IdImpl(UUID.randomUUID().toString()).compact(), p);
+                  mapping.put(new IdImpl(UUID.randomUUID().toString()).toString(), p);
                 }
                 return mapping;
               }
@@ -721,7 +717,6 @@ public class IndexServiceImplTest {
     IndexServiceImpl indexServiceImpl = new IndexServiceImpl();
     indexServiceImpl.setAuthorizationService(setupAuthorizationService(mediapackage));
     indexServiceImpl.setIngestService(setupIngestService(mediapackage, Capture.<InputStream> newInstance()));
-    indexServiceImpl.setCommonEventCatalogUIAdapter(commonEventCatalogUIAdapter);
     indexServiceImpl.addCatalogUIAdapter(commonEventCatalogUIAdapter);
     indexServiceImpl.setSecurityService(securityService);
     indexServiceImpl.setUserDirectoryService(noUsersUserDirectoryService);
@@ -773,7 +768,7 @@ public class IndexServiceImplTest {
 
     SearchResult<Event> result = new SearchResultImpl<>(query, 0, 0);
 
-    AbstractSearchIndex abstractIndex = EasyMock.createMock(AbstractSearchIndex.class);
+    ElasticsearchIndex abstractIndex = EasyMock.createMock(ElasticsearchIndex.class);
     EasyMock.expect(abstractIndex.getByQuery(EasyMock.anyObject(EventSearchQuery.class))).andReturn(result);
     EasyMock.replay(abstractIndex);
 
@@ -789,19 +784,59 @@ public class IndexServiceImplTest {
     // mock/initialize dependencies
     String username = "user1";
     String org = "mh_default_org";
-    String testResourceLocation = "/events/update-event.json";
-    String metadataJson = IOUtils.toString(getClass().getResourceAsStream(testResourceLocation));
-    MetadataCollection metadataCollection = new DublinCoreMetadataCollection();
-    metadataCollection.addField(MetadataField.createTextMetadataField(
-            "title", Opt.some("title"), "EVENTS.EVENTS.DETAILS.METADATA.TITLE", false, true, Opt.none(), Opt.none(),
-            Opt.none(), Opt.none(), Opt.none()));
-    metadataCollection.addField(MetadataField.createTextLongMetadataField(
-            "creator", Opt.some("creator"), "EVENTS.EVENTS.DETAILS.METADATA.PRESENTERS", false, false, Opt.none(),
-            Opt.none(), Opt.none(), Opt.none(), Opt.none()));
-    metadataCollection.addField(MetadataField.createTextMetadataField(
-            "isPartOf", Opt.some("isPartOf"), "EVENTS.EVENTS.DETAILS.METADATA.SERIES", false, false, Opt.none(),
-            Opt.none(), Opt.none(), Opt.none(), Opt.none()));
-    MetadataList metadataList = new MetadataList(metadataCollection, metadataJson);
+    DublinCoreMetadataCollection metadataCollection = new DublinCoreMetadataCollection();
+    metadataCollection.addField(new MetadataField(
+            "title",
+            "title",
+            "EVENTS.EVENTS.DETAILS.METADATA.TITLE",
+            false,
+            true,
+            "title",
+            null,
+            MetadataField.Type.TEXT,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null));
+    metadataCollection.addField(new MetadataField(
+            "creator",
+            "creator",
+            "EVENTS.EVENTS.DETAILS.METADATA.PRESENTERS",
+            false,
+            false,
+            null,
+            null,
+            MetadataField.Type.TEXT_LONG,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null));
+    final MetadataField seriesMetadataField = new MetadataField(
+            "isPartOf",
+            "isPartOf",
+            "EVENTS.EVENTS.DETAILS.METADATA.SERIES",
+            false,
+            false,
+            null,
+            null,
+            MetadataField.Type.TEXT,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null);
+    seriesMetadataField.setValue("series-1");
+    metadataCollection.addField(seriesMetadataField);
+    MetadataList metadataList = new MetadataList();
+    metadataList.getMetadataList().put("dublincore/episode", new MetadataList.TitledMetadataCollection("EVENTS.EVENTS.DETAILS.CATALOG.EPISODE", metadataCollection));
     String eventId = "event-1";
     Event event = new Event(eventId, org);
     event.setTitle("Test Event 1");
@@ -813,7 +848,7 @@ public class IndexServiceImplTest {
     SearchResultImpl<Event> searchResult = new SearchResultImpl<>(query, 0, 0);
     searchResult.addResultItem(searchResultItem);
     SecurityService securityService = setupSecurityService(username, org);
-    AbstractSearchIndex index = EasyMock.createMock(AbstractSearchIndex.class);
+    ElasticsearchIndex index = EasyMock.createMock(ElasticsearchIndex.class);
     MediaPackage mp = MediaPackageBuilderFactory.newInstance().newMediaPackageBuilder()
             .loadFromXml(getClass().getResourceAsStream("/events/update-event-mp.xml"));
     EasyMock.expect(index.getByQuery(EasyMock.anyObject(EventSearchQuery.class))).andReturn(searchResult);
@@ -845,7 +880,6 @@ public class IndexServiceImplTest {
     IndexServiceImpl indexService = new IndexServiceImpl();
     indexService.setSecurityService(securityService);
     indexService.setSchedulerService(schedulerService);
-    indexService.setCommonEventCatalogUIAdapter(commonEventCatalogUIAdapter);
     indexService.addCatalogUIAdapter(commonEventCatalogUIAdapter);
     indexService.setSeriesService(seriesService);
     indexService.setWorkspace(workspace);
@@ -977,10 +1011,11 @@ public class IndexServiceImplTest {
 
   }
 
-  private MetadataField<Iterable<String>> createCreatorMetadataField(Iterable<String> value) {
-    MetadataField<Iterable<String>> creator = MetadataField.createMetadataField(
-            DublinCore.PROPERTY_CREATOR.getLocalName(), Opt.none(), "creator", false, false, Opt.none(),
-            MetadataField.Type.TEXT, Opt.none(), Opt.none(), Opt.none(), Opt.none(), Opt.none(), null);
+  private MetadataField createCreatorMetadataField(Iterable<String> value) {
+    final MetadataField creator = new MetadataField(DublinCore.PROPERTY_CREATOR.getLocalName(), null, "creator", false, false, null,
+            null, MetadataField.Type.TEXT, null, null, null, null, null,
+            null,
+            null);
     creator.setValue(value);
     return creator;
   }
@@ -1015,34 +1050,34 @@ public class IndexServiceImplTest {
     IndexServiceImpl indexServiceImpl = new IndexServiceImpl();
     CommonEventCatalogUIAdapter commonEventCatalogUIAdapter = new CommonEventCatalogUIAdapter();
     commonEventCatalogUIAdapter.updated(properties);
-    indexServiceImpl.setCommonEventCatalogUIAdapter(commonEventCatalogUIAdapter);
+    indexServiceImpl.addCatalogUIAdapter(commonEventCatalogUIAdapter);
     indexServiceImpl.setUserDirectoryService(userDirectoryService);
     indexServiceImpl.setSecurityService(securityService);
 
-    MetadataCollection metadata = commonEventCatalogUIAdapter.getRawFields();
+    DublinCoreMetadataCollection metadata = commonEventCatalogUIAdapter.getRawFields();
 
     // Possible presenter combinations
-    MetadataField<Iterable<String>> emptyUpdatedPresenter = createCreatorMetadataField(new ArrayList<String>());
+    MetadataField emptyUpdatedPresenter = createCreatorMetadataField(new ArrayList<String>());
 
     ArrayList<String> oneNonUserList = new ArrayList<>();
     oneNonUserList.add(nonUser1);
-    MetadataField<Iterable<String>> nonUserUpdatedPresenter = createCreatorMetadataField(oneNonUserList);
+    MetadataField nonUserUpdatedPresenter = createCreatorMetadataField(oneNonUserList);
 
     ArrayList<String> multiNonUserList = new ArrayList<>();
     multiNonUserList.add(nonUser1);
     multiNonUserList.add(nonUser2);
     multiNonUserList.add(nonUser3);
-    MetadataField<Iterable<String>> multiNonUserUpdatedPresenter = createCreatorMetadataField(multiNonUserList);
+    MetadataField multiNonUserUpdatedPresenter = createCreatorMetadataField(multiNonUserList);
 
     ArrayList<String> oneUserList = new ArrayList<>();
     oneUserList.add(user1.getUsername());
-    MetadataField<Iterable<String>> userUpdatedPresenter = createCreatorMetadataField(oneUserList);
+    MetadataField userUpdatedPresenter = createCreatorMetadataField(oneUserList);
 
     ArrayList<String> multiUserList = new ArrayList<>();
     multiUserList.add(user1.getUsername());
     multiUserList.add(user2.getUsername());
     multiUserList.add(user3.getUsername());
-    MetadataField<Iterable<String>> multiUserUpdatedPresenter = createCreatorMetadataField(multiUserList);
+    MetadataField multiUserUpdatedPresenter = createCreatorMetadataField(multiUserList);
 
     ArrayList<String> mixedUserList = new ArrayList<>();
     mixedUserList.add(user1.getUsername());
@@ -1051,7 +1086,7 @@ public class IndexServiceImplTest {
     mixedUserList.add(nonUser2);
     mixedUserList.add(nonUser3);
     mixedUserList.add(user3.getUsername());
-    MetadataField<Iterable<String>> mixedPresenters = createCreatorMetadataField(mixedUserList);
+    MetadataField mixedPresenters = createCreatorMetadataField(mixedUserList);
     ArrayList<String> userFullNames = new ArrayList<>();
     userFullNames.add(user1.getName());
     userFullNames.add(user2.getName());

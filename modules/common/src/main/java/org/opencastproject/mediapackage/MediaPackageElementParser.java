@@ -23,10 +23,12 @@ package org.opencastproject.mediapackage;
 
 import static org.apache.commons.io.IOUtils.toInputStream;
 
+import org.opencastproject.util.XmlSafeParser;
 import org.opencastproject.util.data.Function;
 
-import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
 
+import java.io.IOException;
 import java.io.StringWriter;
 import java.util.Collection;
 import java.util.Iterator;
@@ -95,18 +97,13 @@ public final class MediaPackageElementParser {
     Unmarshaller m = null;
     try {
       m = MediaPackageImpl.context.createUnmarshaller();
-      return (MediaPackageElement) m.unmarshal(new InputSource(toInputStream(xml)));
+      return (MediaPackageElement) m.unmarshal(XmlSafeParser.parse(toInputStream(xml)));
     } catch (JAXBException e) {
       throw new MediaPackageException(e.getLinkedException() != null ? e.getLinkedException() : e);
+    } catch (IOException | SAXException e) {
+      throw new MediaPackageException(e);
     }
   }
-
-  /** {@link #getFromXml(String)} as function. */
-  public static final Function<String, MediaPackageElement> getFromXml = new Function.X<String, MediaPackageElement>() {
-    @Override public MediaPackageElement xapply(String s) throws Exception {
-      return getFromXml(s);
-    }
-  };
 
   /**
    * Serializes media package element list to a string.
@@ -137,12 +134,6 @@ public final class MediaPackageElementParser {
       }
     }
   }
-
-  public static final Function<String, List<MediaPackageElement>> getArrayFromXmlFn = new Function.X<String, List<MediaPackageElement>>() {
-    @Override public List<MediaPackageElement> xapply(String xml) throws Exception {
-      return (List<MediaPackageElement>) getArrayFromXml(xml);
-    }
-  };
 
   /**
    * Parses the serialized media package element list.

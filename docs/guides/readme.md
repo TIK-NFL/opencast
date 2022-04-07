@@ -16,7 +16,7 @@ Requires python virtual environment.
 
 ```sh
 % cd guides
-% virtualenv venv
+% python -m venv venv
 % . ./venv/bin/activate
 % pip install -r requirements.txt
 % cd developer

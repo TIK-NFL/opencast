@@ -28,8 +28,6 @@ import static org.opencastproject.util.doc.rest.RestParameter.Type.STRING;
 
 import org.opencastproject.index.service.resources.list.query.ServicesListQuery;
 import org.opencastproject.index.service.util.RestUtils;
-import org.opencastproject.matterhorn.search.SearchQuery;
-import org.opencastproject.matterhorn.search.SortCriterion;
 import org.opencastproject.serviceregistry.api.HostRegistration;
 import org.opencastproject.serviceregistry.api.ServiceRegistry;
 import org.opencastproject.serviceregistry.api.ServiceState;
@@ -40,6 +38,8 @@ import org.opencastproject.util.doc.rest.RestParameter;
 import org.opencastproject.util.doc.rest.RestQuery;
 import org.opencastproject.util.doc.rest.RestResponse;
 import org.opencastproject.util.doc.rest.RestService;
+import org.opencastproject.util.requests.SortCriterion;
+import org.opencastproject.util.requests.SortCriterion.Order;
 
 import com.entwinemedia.fn.data.json.JValue;
 import com.entwinemedia.fn.data.json.Jsons;
@@ -47,6 +47,9 @@ import com.entwinemedia.fn.data.json.Jsons;
 import org.apache.commons.lang3.StringUtils;
 import org.json.simple.JSONAware;
 import org.json.simple.JSONObject;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -76,6 +79,15 @@ import javax.ws.rs.core.Response;
               + "<em>This service is for exclusive use by the module admin-ui. Its API might change "
               + "anytime without prior notice. Any dependencies other than the admin UI will be strictly ignored. "
               + "DO NOT use this for integration of third-party applications.<em>"})
+@Component(
+  immediate = true,
+  service = ServicesEndpoint.class,
+  property = {
+    "service.description=Admin UI - Services facade Endpoint",
+    "opencast.service.type=org.opencastproject.adminui.endpoint.ServicesEndpoint",
+    "opencast.service.path=/admin-ng/services"
+  }
+)
 public class ServicesEndpoint {
   private static final Logger logger = LoggerFactory.getLogger(ServicesEndpoint.class);
   private ServiceRegistry serviceRegistry;
@@ -93,7 +105,7 @@ public class ServicesEndpoint {
           @RestParameter(name = "sort", description = "The sort order.  May include any "
                   + "of the following: host, name, running, queued, completed,  meanRunTime, meanQueueTime, "
                   + "status. The sort suffix must be :asc for ascending sort order and :desc for descending.", isRequired = false, type = STRING)
-  }, reponses = { @RestResponse(description = "Returns the list of services from Opencast", responseCode = HttpServletResponse.SC_OK) }, returnDescription = "The list of services")
+  }, responses = { @RestResponse(description = "Returns the list of services from Opencast", responseCode = HttpServletResponse.SC_OK) }, returnDescription = "The list of services")
   public Response getServices(@QueryParam("limit") final int limit, @QueryParam("offset") final int offset,
           @QueryParam("filter") String filter, @QueryParam("sort") String sort) throws Exception {
 
@@ -162,7 +174,7 @@ public class ServicesEndpoint {
           SortCriterion sortCriterion = sortCriteria.iterator().next();
           Collections.sort(services, new ServiceStatisticsComparator(
                   sortCriterion.getFieldName(),
-                  sortCriterion.getOrder() == SearchQuery.Order.Ascending));
+                  sortCriterion.getOrder() == Order.Ascending));
         } catch (Exception ex) {
           logger.warn("Failed to sort services collection.", ex);
         }
@@ -401,6 +413,7 @@ public class ServicesEndpoint {
   }
 
   /** OSGI activate method. */
+  @Activate
   public void activate() {
     logger.info("ServicesEndpoint is activated!");
   }
@@ -409,6 +422,7 @@ public class ServicesEndpoint {
    * @param serviceRegistry
    *          the serviceRegistry to set
    */
+  @Reference
   public void setServiceRegistry(ServiceRegistry serviceRegistry) {
     this.serviceRegistry = serviceRegistry;
   }

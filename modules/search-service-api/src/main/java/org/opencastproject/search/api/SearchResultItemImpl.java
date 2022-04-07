@@ -23,6 +23,7 @@
 package org.opencastproject.search.api;
 
 import org.opencastproject.mediapackage.MediaPackage;
+import org.opencastproject.security.api.AccessControlList;
 
 import java.util.ArrayList;
 import java.util.Date;
@@ -62,6 +63,9 @@ public class SearchResultItemImpl implements SearchResultItem {
   /** The media package */
   @XmlElement(name = "mediapackage", namespace = "http://mediapackage.opencastproject.org")
   private MediaPackage mediaPackage = null;
+
+  @XmlElement(name = "acl")
+  private AccessControlList acl = null;
 
   /** Dublin core field 'dc:extent' */
   @XmlElement
@@ -161,6 +165,10 @@ public class SearchResultItemImpl implements SearchResultItem {
   /** Media date of last modification in milliseconds **/
   @XmlElement
   private Date modified = null;
+
+  /** Date of when this event was deleted or null if the event was not deleted */
+  @XmlElement
+  private Date deleted = null;
 
   /** Result ranking score **/
   @XmlElement
@@ -591,6 +599,14 @@ public class SearchResultItemImpl implements SearchResultItem {
     return mediaPackage;
   }
 
+  public void setAccessControlList(AccessControlList acl) {
+    this.acl = acl;
+  }
+
+  public AccessControlList getAccessControlList() {
+    return acl;
+  }
+
   /**
    * {@inheritDoc}
    *
@@ -607,8 +623,9 @@ public class SearchResultItemImpl implements SearchResultItem {
    *          the keyword
    */
   public void addKeyword(String keyword) {
-    if (keywords == null)
+    if (keywords == null) {
       keywords = new ArrayList<String>();
+    }
     keywords.add(keyword);
   }
 
@@ -638,12 +655,20 @@ public class SearchResultItemImpl implements SearchResultItem {
     return modified;
   }
 
+  public Date getDeletionDate() {
+    return deleted;
+  }
+
   /**
    * @param modified
    *          the modified to set
    */
   public void setModified(Date modified) {
     this.modified = modified;
+  }
+
+  public void setDeletionDate(Date deleted) {
+    this.deleted = deleted;
   }
 
   /**
@@ -681,8 +706,9 @@ public class SearchResultItemImpl implements SearchResultItem {
    *          the segment to add
    */
   public void addSegment(MediaSegment segment) {
-    if (mediaSegments == null)
+    if (mediaSegments == null) {
       mediaSegments = new TreeSet<MediaSegmentImpl>();
+    }
     mediaSegments.add((MediaSegmentImpl) segment); // TODO: assuming this
   }
 
@@ -694,6 +720,7 @@ public class SearchResultItemImpl implements SearchResultItem {
     item.setId(from.getId());
     item.setOrganization(from.getOrganization());
     item.setMediaPackage(from.getMediaPackage());
+    item.setAccessControlList(from.getAccessControlList());
     item.setDcExtent(from.getDcExtent());
     item.setDcTitle(from.getDcTitle());
     item.setDcSubject(from.getDcSubject());
@@ -716,13 +743,16 @@ public class SearchResultItemImpl implements SearchResultItem {
     item.setDcLicense(from.getDcLicense());
     item.setOcMediapackage(from.getOcMediapackage());
     item.setMediaType(from.getType());
-    for (String k : from.getKeywords())
+    for (String k : from.getKeywords()) {
       item.addKeyword(k);
+    }
     item.setCover(from.getCover());
     item.setModified(from.getModified());
+    item.setDeletionDate(from.getDeletionDate());
     item.setScore(from.getScore());
-    for (MediaSegment s : from.getSegments())
+    for (MediaSegment s : from.getSegments()) {
       item.addSegment(s);
+    }
     return item;
   }
 }

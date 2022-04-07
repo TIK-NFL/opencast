@@ -21,12 +21,13 @@
 
 package org.opencastproject.index.service.resources.list.query;
 
-import org.opencastproject.index.service.resources.list.api.ResourceListFilter;
-import org.opencastproject.index.service.resources.list.api.ResourceListFilter.SourceType;
 import org.opencastproject.index.service.resources.list.provider.AclListProvider;
 import org.opencastproject.index.service.resources.list.provider.ContributorsListProvider;
 import org.opencastproject.index.service.resources.list.provider.SeriesListProvider;
 import org.opencastproject.index.service.util.FiltersUtils;
+import org.opencastproject.list.api.ResourceListFilter;
+import org.opencastproject.list.api.ResourceListFilter.SourceType;
+import org.opencastproject.list.impl.ResourceListQueryImpl;
 import org.opencastproject.util.data.Option;
 import org.opencastproject.util.data.Tuple;
 
@@ -50,6 +51,12 @@ public class SeriesListQuery extends ResourceListQueryImpl {
 
   public static final String FILTER_ACL_NAME = "managedAcl";
   private static final String FILTER_ACL_LABEL = "FILTERS.SERIES.ACCESS_POLICY.LABEL";
+
+  public static final String FILTER_ACL_PERMISSION_READ_NAME = "acl_permission_read";
+  private static final String FILTER_ACL_PERMISSION_READ_LABEL = "FILTERS.SERIES.ACL_PREMISSION_READ.LABEL";
+
+  public static final String FILTER_ACL_PERMISSION_WRITE_NAME = "acl_permission_write";
+  private static final String FILTER_ACL_PERMISSION_WRITE_LABEL = "FILTERS.SERIES.ACL_PREMISSION_WRITE.LABEL";
 
   public static final String FILTER_CONTRIBUTORS_NAME = "contributors";
   private static final String FILTER_CONTRIBUTORS_LABEL = "FILTERS.SERIES.CONTRIBUTORS.LABEL";
@@ -79,9 +86,7 @@ public class SeriesListQuery extends ResourceListQueryImpl {
 
   public SeriesListQuery() {
     super();
-    this.availableFilters.add(createContributorsFilter(Option.<String> none()));
     this.availableFilters.add(createCreationDateFilter(Option.<Tuple<Date, Date>> none()));
-    this.availableFilters.add(createOrganizersFilter(Option.<String> none()));
   }
 
   /**
@@ -101,6 +106,33 @@ public class SeriesListQuery extends ResourceListQueryImpl {
    */
   public Option<String> getAccessPolicy() {
     return this.getFilterValue(FILTER_ACL_NAME);
+  }
+
+  public void withoutPermissions() {
+    ResourceListFilter filter = this.getFilter(FILTER_ACL_PERMISSION_READ_NAME);
+    if (filter != null) {
+      this.removeFilter(filter);
+    }
+    filter = this.getFilter(FILTER_ACL_PERMISSION_WRITE_NAME);
+    if (filter != null) {
+      this.removeFilter(filter);
+    }
+  }
+
+  public void withReadPermission(boolean value) {
+    this.addFilter(createReadPermissionFilter(Option.option(value)));
+  }
+
+  public void withWritePermission(boolean value) {
+    this.addFilter(createWritePermissionFilter(Option.option(value)));
+  }
+
+  public Option<Boolean> getReadPermission() {
+    return this.getFilterValue(FILTER_ACL_PERMISSION_READ_NAME);
+  }
+
+  public Option<Boolean> getWritePermission() {
+    return this.getFilterValue(FILTER_ACL_PERMISSION_WRITE_NAME);
   }
 
   /**
@@ -267,6 +299,16 @@ public class SeriesListQuery extends ResourceListQueryImpl {
             Option.some(AclListProvider.NAME));
   }
 
+  public static ResourceListFilter<Boolean> createReadPermissionFilter(Option<Boolean> value) {
+    return FiltersUtils.generateFilter(value, FILTER_ACL_PERMISSION_READ_NAME, FILTER_ACL_PERMISSION_READ_LABEL,
+        SourceType.SELECT, Option.none());
+  }
+
+  public static ResourceListFilter<Boolean> createWritePermissionFilter(Option<Boolean> value) {
+    return FiltersUtils.generateFilter(value, FILTER_ACL_PERMISSION_WRITE_NAME, FILTER_ACL_PERMISSION_WRITE_LABEL,
+        SourceType.SELECT, Option.none());
+  }
+
   /**
    * Create a new {@link ResourceListFilter} based on a contributor
    *
@@ -300,7 +342,7 @@ public class SeriesListQuery extends ResourceListQueryImpl {
    */
   public static ResourceListFilter<Tuple<Date, Date>> createCreationDateFilter(Option<Tuple<Date, Date>> period) {
     return FiltersUtils.generateFilter(period, FILTER_CREATIONDATE_NAME, FILTER_CREATIONDATE_LABEL, SourceType.PERIOD,
-            Option.some(SeriesListProvider.CREATION_DATE));
+            Option.none());
   }
 
   /**

@@ -71,6 +71,12 @@ public class SigningMediaPackageSerializer implements MediaPackageSerializer, Ma
     this.urlSigningService = urlSigningService;
   }
 
+  public void unsetUrlSigningService(UrlSigningService urlSigningService) {
+    if (this.urlSigningService == urlSigningService) {
+      this.urlSigningService = null;
+    }
+  }
+
   /** OSGi callback if properties file is present */
   @SuppressWarnings("rawtypes")
   @Override
@@ -80,27 +86,19 @@ public class SigningMediaPackageSerializer implements MediaPackageSerializer, Ma
             this.getClass().getSimpleName());
   }
 
-  /**
-   * {@inheritDoc}
-   *
-   * @see org.opencastproject.mediapackage.MediaPackageSerializer#encodeURI(URI)
-   */
   @Override
   public URI encodeURI(URI uri) throws URISyntaxException {
-    if (uri == null)
+    if (uri == null) {
       throw new IllegalArgumentException("Argument uri is null");
+    }
     return uri;
   }
 
-  /**
-   * {@inheritDoc}
-   *
-   * @see org.opencastproject.mediapackage.MediaPackageSerializer#decodeURI(URI)
-   */
   @Override
   public URI decodeURI(URI uri) throws URISyntaxException {
-    if (uri == null)
+    if (uri == null) {
       throw new IllegalArgumentException("Argument uri is null");
+    }
     return sign(uri);
   }
 

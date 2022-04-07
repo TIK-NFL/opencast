@@ -23,7 +23,6 @@ package org.opencastproject.scheduler.api;
 
 import org.opencastproject.mediapackage.MediaPackage;
 import org.opencastproject.metadata.dublincore.DublinCoreCatalog;
-import org.opencastproject.security.api.AccessControlList;
 import org.opencastproject.security.api.UnauthorizedException;
 import org.opencastproject.util.NotFoundException;
 
@@ -275,20 +274,6 @@ public interface SchedulerService {
           throws NotFoundException, UnauthorizedException, SchedulerException;
 
   /**
-   * Retrieves access control list associated with specified event ID.
-   *
-   * @param mediaPackageId
-   *          ID of event for which access control list will be retrieved
-   * @return {@link AccessControlList} for specified event
-   * @throws NotFoundException
-   *           if event with specified ID cannot be found
-   * @throws SchedulerException
-   *           if exception occurred
-   */
-  AccessControlList getAccessControlList(String mediaPackageId)
-          throws NotFoundException, UnauthorizedException, SchedulerException;
-
-  /**
    * Retrieves workflow configuration associated with specified event ID.
    *
    * @param mediaPackageId
@@ -377,7 +362,7 @@ public interface SchedulerService {
    * @param captureDeviceID
    *          capture device ID for which conflicting events are searched for
    * @param startDate
-   *          start date of of conflicting period
+   *          start date of conflicting period
    * @param endDate
    *          end date of conflicting period
    * @return a {@link MediaPackage} list of all conflicting events

@@ -21,21 +21,25 @@
 
 package org.opencastproject.assetmanager.aws.s3;
 
+import org.opencastproject.assetmanager.api.storage.AssetStore;
+import org.opencastproject.assetmanager.api.storage.AssetStoreException;
+import org.opencastproject.assetmanager.api.storage.RemoteAssetStore;
 import org.opencastproject.assetmanager.aws.AwsAbstractArchive;
 import org.opencastproject.assetmanager.aws.AwsUploadOperationResult;
+import org.opencastproject.assetmanager.aws.persistence.AwsAssetDatabase;
 import org.opencastproject.assetmanager.aws.persistence.AwsAssetMapping;
-import org.opencastproject.assetmanager.impl.storage.AssetStore;
-import org.opencastproject.assetmanager.impl.storage.AssetStoreException;
-import org.opencastproject.assetmanager.impl.storage.RemoteAssetStore;
 import org.opencastproject.util.ConfigurationException;
 import org.opencastproject.util.OsgiUtil;
 import org.opencastproject.util.data.Option;
+import org.opencastproject.workspace.api.Workspace;
 
 import com.amazonaws.AmazonServiceException;
+import com.amazonaws.ClientConfiguration;
 import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
+import com.amazonaws.client.builder.AwsClientBuilder;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.BucketVersioningConfiguration;
@@ -44,8 +48,12 @@ import com.amazonaws.services.s3.model.SetBucketVersioningConfigurationRequest;
 import com.amazonaws.services.s3.transfer.TransferManager;
 import com.amazonaws.services.s3.transfer.Upload;
 
+import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.osgi.service.component.ComponentContext;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,6 +62,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Dictionary;
 
+@Component(
+    property = {
+    "service.description=Amazon S3 based asset store",
+    "store.type=aws-s3"
+    },
+    immediate = true,
+    service = { RemoteAssetStore.class, AwsS3AssetStore.class }
+)
 public class AwsS3AssetStore extends AwsAbstractArchive implements RemoteAssetStore {
 
   /** Log facility */
@@ -65,6 +81,16 @@ public class AwsS3AssetStore extends AwsAbstractArchive implements RemoteAssetSt
   public static final String AWS_S3_SECRET_ACCESS_KEY_CONFIG = "org.opencastproject.assetmanager.aws.s3.secret.key";
   public static final String AWS_S3_REGION_CONFIG = "org.opencastproject.assetmanager.aws.s3.region";
   public static final String AWS_S3_BUCKET_CONFIG = "org.opencastproject.assetmanager.aws.s3.bucket";
+  public static final String AWS_S3_ENDPOINT_CONFIG = "org.opencastproject.assetmanager.aws.s3.endpoint";
+  public static final String AWS_S3_PATH_STYLE_CONFIG = "org.opencastproject.assetmanager.aws.s3.path.style";
+  public static final String AWS_S3_MAX_CONNECTIONS = "org.opencastproject.assetmanager.aws.s3.max.connections";
+  public static final String AWS_S3_CONNECTION_TIMEOUT = "org.opencastproject.assetmanager.aws.s3.connection.timeout";
+  public static final String AWS_S3_MAX_RETRIES = "org.opencastproject.assetmanager.aws.s3.max.retries";
+
+  // defaults
+  public static final int DEFAULT_MAX_CONNECTIONS = 50;
+  public static final int DEFAULT_CONNECTION_TIMEOUT = 10000;
+  public static final int DEFAULT_MAX_RETRIES = 100;
 
   /** The AWS client and transfer manager */
   private AmazonS3 s3 = null;
@@ -73,7 +99,25 @@ public class AwsS3AssetStore extends AwsAbstractArchive implements RemoteAssetSt
   /** The AWS S3 bucket name */
   private String bucketName = null;
 
+  private String endpoint = null;
+
+  private boolean pathStyle = false;
+
   private boolean bucketCreated = false;
+
+  /** OSGi Di */
+  @Override
+  @Reference(name = "workspace")
+  public void setWorkspace(Workspace workspace) {
+    super.setWorkspace(workspace);
+  }
+
+  /** OSGi Di */
+  @Override
+  @Reference(name = "database")
+  public void setDatabase(AwsAssetDatabase db) {
+    super.setDatabase(db);
+  }
 
   /**
    * Service activator, called via declarative services configuration.
@@ -81,6 +125,7 @@ public class AwsS3AssetStore extends AwsAbstractArchive implements RemoteAssetSt
    * @param cc
    *          the component context
    */
+  @Activate
   public void activate(final ComponentContext cc) throws IllegalStateException, IOException, ConfigurationException {
     // Get the configuration
     if (cc != null) {
@@ -108,6 +153,13 @@ public class AwsS3AssetStore extends AwsAbstractArchive implements RemoteAssetSt
       regionName = getAWSConfigKey(cc, AWS_S3_REGION_CONFIG);
       logger.info("AWS region is {}", regionName);
 
+      endpoint = OsgiUtil.getComponentContextProperty(
+          cc, AWS_S3_ENDPOINT_CONFIG, "s3." + regionName + ".amazonaws.com");
+      logger.info("AWS endpoint is {}", endpoint);
+
+      pathStyle = BooleanUtils.toBoolean(OsgiUtil.getComponentContextProperty(cc, AWS_S3_PATH_STYLE_CONFIG, "false"));
+      logger.info("AWS path style is {}", pathStyle);
+
       // Explicit credentials are optional.
       AWSCredentialsProvider provider = null;
       Option<String> accessKeyIdOpt = OsgiUtil.getOptCfg(cc.getProperties(), AWS_S3_ACCESS_KEY_ID_CONFIG);
@@ -116,15 +168,37 @@ public class AwsS3AssetStore extends AwsAbstractArchive implements RemoteAssetSt
       // Keys not informed so use default credentials provider chain, which
       // will look at the environment variables, java system props, credential files, and instance
       // profile credentials
-      if (accessKeyIdOpt.isNone() && accessKeySecretOpt.isNone())
+      if (accessKeyIdOpt.isNone() && accessKeySecretOpt.isNone()) {
         provider = new DefaultAWSCredentialsProviderChain();
-      else
+      } else {
         provider = new AWSStaticCredentialsProvider(
                 new BasicAWSCredentials(accessKeyIdOpt.get(), accessKeySecretOpt.get()));
+      }
+
+      // S3 client configuration
+      ClientConfiguration clientConfiguration = new ClientConfiguration();
+
+      int maxConnections = OsgiUtil.getOptCfgAsInt(cc.getProperties(), AWS_S3_MAX_CONNECTIONS)
+              .getOrElse(DEFAULT_MAX_CONNECTIONS);
+      logger.debug("Max Connections: {}", maxConnections);
+      clientConfiguration.setMaxConnections(maxConnections);
+
+      int connectionTimeout = OsgiUtil.getOptCfgAsInt(cc.getProperties(), AWS_S3_CONNECTION_TIMEOUT)
+              .getOrElse(DEFAULT_CONNECTION_TIMEOUT);
+      logger.debug("Connection Output: {}", connectionTimeout);
+      clientConfiguration.setConnectionTimeout(connectionTimeout);
+
+      int maxRetries = OsgiUtil.getOptCfgAsInt(cc.getProperties(), AWS_S3_MAX_RETRIES)
+              .getOrElse(DEFAULT_MAX_RETRIES);
+      logger.debug("Max Retry: {}", maxRetries);
+      clientConfiguration.setMaxErrorRetry(maxRetries);
 
       // Create AWS client.
       s3 = AmazonS3ClientBuilder.standard()
-              .withRegion(regionName)
+              .withEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(endpoint
+              , regionName))
+              .withClientConfiguration(clientConfiguration)
+              .withPathStyleAccessEnabled(pathStyle)
               .withCredentials(provider)
               .build();
 
@@ -154,7 +228,8 @@ public class AwsS3AssetStore extends AwsAbstractArchive implements RemoteAssetSt
           s3.setBucketVersioningConfiguration(configRequest);
           logger.info("AWS S3 ARCHIVE bucket {} created and versioning enabled", bucketName);
         } catch (Exception e2) {
-          throw new IllegalStateException("ARCHIVE bucket " + bucketName + " cannot be created: " + e2.getMessage(), e2);
+          throw new IllegalStateException(
+              "ARCHIVE bucket " + bucketName + " cannot be created: " + e2.getMessage(), e2);
         }
       } else {
         throw new IllegalStateException("ARCHIVE bucket " + bucketName + " exists, but we can't access it: "
@@ -170,18 +245,19 @@ public class AwsS3AssetStore extends AwsAbstractArchive implements RemoteAssetSt
    */
   protected AwsUploadOperationResult uploadObject(File origin, String objectName) throws AssetStoreException {
     // Check first if bucket is there.
-    if (!bucketCreated)
+    if (!bucketCreated) {
       createAWSBucket();
+    }
 
     // Upload file to AWS S3
     // Use TransferManager to take advantage of multipart upload.
     // TransferManager processes all transfers asynchronously, so this call will return immediately.
     logger.info("Uploading {} to archive bucket {}...", objectName, bucketName);
-    Upload upload = s3TransferManager.upload(bucketName, objectName, origin);
-    long start = System.currentTimeMillis();
 
     S3Object obj = null;
     try {
+      Upload upload = s3TransferManager.upload(bucketName, objectName, origin);
+      long start = System.currentTimeMillis();
       // Block and wait for the upload to finish
       upload.waitForCompletion();
       logger.info("Upload of {} to archive bucket {} completed in {} seconds",
@@ -196,9 +272,13 @@ public class AwsS3AssetStore extends AwsAbstractArchive implements RemoteAssetSt
       return new AwsUploadOperationResult(objectName, versionId);
     } catch (InterruptedException e) {
       throw new AssetStoreException("Operation interrupted", e);
+    } catch (Exception e) {
+      throw new AssetStoreException("Upload failed", e);
     } finally {
       try {
-        obj.close();
+        if (obj != null) {
+          obj.close();
+        }
       } catch (IOException e) {
         //Swallow and ignore
       }
@@ -218,11 +298,6 @@ public class AwsS3AssetStore extends AwsAbstractArchive implements RemoteAssetSt
   */
   protected void deleteObject(AwsAssetMapping map) {
     s3.deleteObject(bucketName, map.getObjectKey());
-  }
-
-  // Used by restore service
-  public String getBucketName() {
-    return this.bucketName;
   }
 
   // For running tests

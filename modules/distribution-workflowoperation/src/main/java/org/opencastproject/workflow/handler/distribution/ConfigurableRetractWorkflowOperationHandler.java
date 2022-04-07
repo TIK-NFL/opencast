@@ -23,13 +23,16 @@ package org.opencastproject.workflow.handler.distribution;
 import static org.opencastproject.util.RequireUtil.notNull;
 
 import org.opencastproject.distribution.api.DownloadDistributionService;
+import org.opencastproject.distribution.api.StreamingDistributionService;
 import org.opencastproject.job.api.JobContext;
 import org.opencastproject.mediapackage.MediaPackage;
 import org.opencastproject.workflow.api.WorkflowInstance;
 import org.opencastproject.workflow.api.WorkflowOperationException;
+import org.opencastproject.workflow.api.WorkflowOperationInstance;
 import org.opencastproject.workflow.api.WorkflowOperationResult;
 import org.opencastproject.workflow.api.WorkflowOperationResult.Action;
 
+import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
 
 /**
@@ -39,18 +42,33 @@ import org.apache.commons.lang3.StringUtils;
 public class ConfigurableRetractWorkflowOperationHandler extends ConfigurableWorkflowOperationHandlerBase {
 
   private static final String CHANNEL_ID_KEY = "channel-id";
+
+  static final String RETRACT_STREAMING = "retract-streaming";
+  static final boolean RETRACT_STREAMING_DEFAULT = false;
+
   // service references
-  private DownloadDistributionService distributionService;
+  private DownloadDistributionService downloadDistributionService;
+  private StreamingDistributionService streamingDistributionService;
 
   /** OSGi DI */
   void setDownloadDistributionService(DownloadDistributionService distributionService) {
-    this.distributionService = distributionService;
+    this.downloadDistributionService = distributionService;
+  }
+
+  void setStreamingDistributionService(StreamingDistributionService distributionService) {
+    this.streamingDistributionService = distributionService;
   }
 
   @Override
-  protected DownloadDistributionService getDistributionService() {
-    assert (distributionService != null);
-    return distributionService;
+  protected DownloadDistributionService getDownloadDistributionService() {
+    assert (downloadDistributionService != null);
+    return downloadDistributionService;
+  }
+
+  @Override
+  protected StreamingDistributionService getStreamingDistributionService() {
+    assert (streamingDistributionService != null);
+    return streamingDistributionService;
   }
 
   @Override
@@ -58,15 +76,22 @@ public class ConfigurableRetractWorkflowOperationHandler extends ConfigurableWor
           throws WorkflowOperationException {
     notNull(workflowInstance, "workflowInstance");
 
+    boolean retractStreaming = RETRACT_STREAMING_DEFAULT;
+    final WorkflowOperationInstance op = workflowInstance.getCurrentOperation();
+    String retractStreamingString = op.getConfiguration(RETRACT_STREAMING);
+    if (retractStreamingString != null) {
+      retractStreaming = BooleanUtils.toBoolean(StringUtils.trimToEmpty(retractStreamingString));
+    }
+
     final MediaPackage mp = workflowInstance.getMediaPackage();
     final String channelId = StringUtils.trimToEmpty(workflowInstance.getCurrentOperation().getConfiguration(
             CHANNEL_ID_KEY));
     if (StringUtils.isBlank((channelId))) {
-      throw new WorkflowOperationException("Unable to publish this mediapackage as the configuration key "
-              + CHANNEL_ID_KEY + " is missing. Unable to determine where to publish these elements.");
+      throw new WorkflowOperationException("Unable to retract this mediapackage as the configuration key "
+              + CHANNEL_ID_KEY + " is missing. Unable to determine from where to retract these elements.");
     }
 
-    retract(mp, channelId);
+    retract(mp, channelId, retractStreaming);
 
     return createResult(mp, Action.CONTINUE);
   }

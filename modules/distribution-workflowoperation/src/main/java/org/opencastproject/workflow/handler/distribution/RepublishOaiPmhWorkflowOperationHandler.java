@@ -20,19 +20,18 @@
  */
 package org.opencastproject.workflow.handler.distribution;
 
-import static com.entwinemedia.fn.fns.Strings.trimToNone;
 import static java.lang.String.format;
 import static org.opencastproject.util.JobUtil.waitForJobs;
-import static org.opencastproject.util.data.Collections.set;
 
 import org.opencastproject.job.api.Job;
 import org.opencastproject.job.api.JobContext;
 import org.opencastproject.mediapackage.MediaPackage;
+import org.opencastproject.mediapackage.MediaPackageElementFlavor;
 import org.opencastproject.mediapackage.MediaPackageException;
 import org.opencastproject.publication.api.OaiPmhPublicationService;
 import org.opencastproject.publication.api.PublicationException;
-import org.opencastproject.util.data.Collections;
 import org.opencastproject.workflow.api.AbstractWorkflowOperationHandler;
+import org.opencastproject.workflow.api.ConfiguredTagsAndFlavors;
 import org.opencastproject.workflow.api.WorkflowInstance;
 import org.opencastproject.workflow.api.WorkflowOperationException;
 import org.opencastproject.workflow.api.WorkflowOperationResult;
@@ -63,38 +62,39 @@ public final class RepublishOaiPmhWorkflowOperationHandler extends AbstractWorkf
     // The flavors of the elements that are to be published
     final Set<String> flavors = new HashSet<>();
     // Check which flavors have been configured
-    final List<String> configuredFlavors = getOptConfig(wi, OPT_SOURCE_FLAVORS).bind(trimToNone).map(asList.toFn())
-            .getOr(Collections.<String> nil());
-    for (String flavor : configuredFlavors) {
-      flavors.add(flavor);
+    ConfiguredTagsAndFlavors tagsAndFlavors = getTagsAndFlavors(wi,
+        Configuration.many, Configuration.many, Configuration.none, Configuration.none);
+    final List<MediaPackageElementFlavor> configuredFlavors = tagsAndFlavors.getSrcFlavors();
+    for (MediaPackageElementFlavor flavor : configuredFlavors) {
+      flavors.add(flavor.toString());
     }
     // Get the configured tags
-    final Set<String> tags = set(getOptConfig(wi, OPT_SOURCE_TAGS).getOr(""));
+    final Set<String> tags = new HashSet<String>(tagsAndFlavors.getSrcTags());
     // repository
     final String repository = getConfig(wi, OPT_REPOSITORY);
 
     logger.debug("Start updating metadata of the media package {} in OAI-PMH repository {}",
-            mp.getIdentifier().compact(), repository);
+            mp.getIdentifier().toString(), repository);
     try {
       Job updateMetadataJob = oaiPmhPublicationService.updateMetadata(mp, repository, flavors, tags, true);
       if (updateMetadataJob == null) {
         logger.info("Unable to create an OAI-PMH update metadata job for the media package {} in repository {}",
-                mp.getIdentifier().compact(), repository);
+                mp.getIdentifier().toString(), repository);
         return createResult(mp, Action.CONTINUE);
       }
 
       if (!waitForJobs(serviceRegistry, updateMetadataJob).isSuccess()) {
         throw new WorkflowOperationException(format(
                 "OAI-PMH update metadata job for the media package %s did not end successfully",
-                mp.getIdentifier().compact()));
+                mp.getIdentifier().toString()));
       }
     } catch (MediaPackageException | PublicationException | IllegalArgumentException | IllegalStateException e) {
       throw new WorkflowOperationException(format(
               "Unable to create an OAI-PMH update metadata job for the media package %s in repository %s",
-              mp.getIdentifier().compact(), repository), e);
+              mp.getIdentifier().toString(), repository), e);
     }
     logger.debug("Updating metadata of the media package {} in OAI-PMH repository {} done",
-            mp.getIdentifier().compact(), repository);
+            mp.getIdentifier().toString(), repository);
     return createResult(mp, Action.CONTINUE);
   }
 

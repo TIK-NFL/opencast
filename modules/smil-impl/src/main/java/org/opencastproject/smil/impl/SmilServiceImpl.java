@@ -44,6 +44,8 @@ import org.opencastproject.smil.entity.media.param.SmilMediaParamGroupImpl;
 import org.opencastproject.smil.entity.media.param.api.SmilMediaParam;
 import org.opencastproject.smil.entity.media.param.api.SmilMediaParamGroup;
 
+import org.osgi.service.component.annotations.Component;
+
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
@@ -53,6 +55,13 @@ import javax.xml.bind.JAXBException;
 /**
  * Implement {@link SmilService} interface.
  */
+@Component(
+    property = {
+        "service.description=SMIL Service"
+    },
+    immediate = true,
+    service = { SmilService.class }
+)
 public class SmilServiceImpl implements SmilService {
 
   /**
@@ -71,7 +80,7 @@ public class SmilServiceImpl implements SmilService {
     SmilImpl smil = new SmilImpl();
     ((SmilHeadImpl) smil.getHead()).addMeta(
             SmilMeta.SMIL_META_NAME_MEDIA_PACKAGE_ID,
-            mediaPackage.getIdentifier().compact());
+            mediaPackage.getIdentifier().toString());
     return new SmilResponseImpl(smil);
   }
 
@@ -113,14 +122,21 @@ public class SmilServiceImpl implements SmilService {
 
   @Override
   public SmilResponse addClip(Smil smil, String parentId, Track track, long start, long duration) throws SmilException {
-     return addClip(smil, parentId, track, start, duration, null);
+    return addClip(smil, parentId, track, start, duration, null);
   }
 
   /**
    * {@inheritDoc}
    */
   @Override
-  public SmilResponse addClip(Smil smil, String parentId, Track track, long start, long duration, String pgId) throws SmilException {
+  public SmilResponse addClip(
+      Smil smil,
+      String parentId,
+      Track track,
+      long start,
+      long duration,
+      String pgId
+  ) throws SmilException {
     if (start < 0) {
       throw new SmilException("Start position should be positive.");
     }
@@ -163,9 +179,12 @@ public class SmilServiceImpl implements SmilService {
     if (newTrack) {
       // add paramgroup for new Track
       trackParamGroup = new SmilMediaParamGroupImpl();
-      ((SmilMediaParamGroupImpl) trackParamGroup).addParam(SmilMediaParam.PARAM_NAME_TRACK_ID, track.getIdentifier());
-      ((SmilMediaParamGroupImpl) trackParamGroup).addParam(SmilMediaParam.PARAM_NAME_TRACK_SRC, track.getURI().toString());
-      ((SmilMediaParamGroupImpl) trackParamGroup).addParam(SmilMediaParam.PARAM_NAME_TRACK_FLAVOR, track.getFlavor().toString());
+      ((SmilMediaParamGroupImpl) trackParamGroup)
+          .addParam(SmilMediaParam.PARAM_NAME_TRACK_ID, track.getIdentifier());
+      ((SmilMediaParamGroupImpl) trackParamGroup)
+          .addParam(SmilMediaParam.PARAM_NAME_TRACK_SRC, track.getURI().toString());
+      ((SmilMediaParamGroupImpl) trackParamGroup)
+          .addParam(SmilMediaParam.PARAM_NAME_TRACK_FLAVOR, track.getFlavor().toString());
       ((SmilHeadImpl) smil.getHead()).addParamGroup(trackParamGroup);
     }
 
@@ -217,7 +236,13 @@ public class SmilServiceImpl implements SmilService {
    * {@inheritDoc}
    */
   @Override
-  public SmilResponse addClips(Smil smil, String parentId, Track[] tracks, long start, long duration) throws SmilException {
+  public SmilResponse addClips(
+      Smil smil,
+      String parentId,
+      Track[] tracks,
+      long start,
+      long duration
+  ) throws SmilException {
     List<SmilObject> trackEntities = new ArrayList<SmilObject>(tracks.length);
     List<SmilObject> otherEntities = new ArrayList<SmilObject>(tracks.length);
     for (Track track : tracks) {

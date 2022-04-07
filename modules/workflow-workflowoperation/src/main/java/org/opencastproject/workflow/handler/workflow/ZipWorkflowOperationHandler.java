@@ -39,6 +39,7 @@ import org.opencastproject.util.MimeTypes;
 import org.opencastproject.util.NotFoundException;
 import org.opencastproject.util.ZipUtil;
 import org.opencastproject.workflow.api.AbstractWorkflowOperationHandler;
+import org.opencastproject.workflow.api.ConfiguredTagsAndFlavors;
 import org.opencastproject.workflow.api.WorkflowInstance;
 import org.opencastproject.workflow.api.WorkflowOperationException;
 import org.opencastproject.workflow.api.WorkflowOperationInstance;
@@ -175,17 +176,18 @@ public class ZipWorkflowOperationHandler extends AbstractWorkflowOperationHandle
     MediaPackageElementFlavor targetFlavor = DEFAULT_ARCHIVE_FLAVOR;
 
     // Read the target flavor
-    String targetFlavorOption = currentOperation.getConfiguration(TARGET_FLAVOR_PROPERTY);
+    ConfiguredTagsAndFlavors tagsAndFlavors = getTagsAndFlavors(workflowInstance,
+        Configuration.none, Configuration.none, Configuration.many, Configuration.many);
+    List<MediaPackageElementFlavor> targetFlavorOption = tagsAndFlavors.getTargetFlavors();
     try {
-      targetFlavor = targetFlavorOption == null ? DEFAULT_ARCHIVE_FLAVOR : MediaPackageElementFlavor.parseFlavor(targetFlavorOption);
+      targetFlavor = targetFlavorOption.isEmpty() ? DEFAULT_ARCHIVE_FLAVOR : targetFlavorOption.get(0);
       logger.trace("Using '{}' as the target flavor for the zip archive of recording {}", targetFlavor, mediaPackage);
     } catch (IllegalArgumentException e) {
       throw new WorkflowOperationException("Flavor '" + targetFlavorOption + "' is not valid", e);
     }
 
     // Read the target tags
-    String targetTagsOption = StringUtils.trimToEmpty(currentOperation.getConfiguration(TARGET_TAGS_PROPERTY));
-    String[] targetTags = StringUtils.split(targetTagsOption, ",");
+    List<String> targetTags = tagsAndFlavors.getTargetTags();
 
     // If the configuration does not specify flavors, just zip them all
     if (flavors == null) {
@@ -222,7 +224,7 @@ public class ZipWorkflowOperationHandler extends AbstractWorkflowOperationHandle
     URI uri = null;
     try {
       in = new FileInputStream(zip);
-      uri = workspace.putInCollection(collectionId, mediaPackage.getIdentifier().compact() + ".zip", in);
+      uri = workspace.putInCollection(collectionId, mediaPackage.getIdentifier().toString() + ".zip", in);
       logger.info("Zipped archive of recording {} is available from {}", mediaPackage, uri);
     } catch (FileNotFoundException e) {
       throw new WorkflowOperationException("zip file " + zip + " not found", e);
@@ -284,7 +286,7 @@ public class ZipWorkflowOperationHandler extends AbstractWorkflowOperationHandle
     }
 
     // Create the temp directory
-    File mediaPackageDir = new File(tempStorageDir, mediaPackage.getIdentifier().compact());
+    File mediaPackageDir = new File(tempStorageDir, mediaPackage.getIdentifier().toString());
     FileUtils.forceMkdir(mediaPackageDir);
 
     // Link or copy each matching element's file from the workspace to the temp directory
@@ -318,7 +320,7 @@ public class ZipWorkflowOperationHandler extends AbstractWorkflowOperationHandle
     FileUtils.writeStringToFile(new File(mediaPackageDir, "manifest.xml"), MediaPackageParser.getAsXml(clone), "UTF-8");
 
     // Zip the directory
-    File zip = new File(tempStorageDir, clone.getIdentifier().compact() + ".zip");
+    File zip = new File(tempStorageDir, clone.getIdentifier().toString() + ".zip");
     int compressValue = compress ? ZipUtil.DEFAULT_COMPRESSION : ZipUtil.NO_COMPRESSION;
 
     long startTime = System.currentTimeMillis();

@@ -157,7 +157,7 @@ public class JpaUserProviderTest {
     JpaUser newUser = createUserWithRoles(org1, "org_admin2", org1.getAdminRole());
     provider.addUser(newUser);
     fail("The current user shouldn't able to create an global admin user.");
-   }
+  }
 
   @Test
   public void testDeleteUser() throws Exception {
@@ -287,7 +287,11 @@ public class JpaUserProviderTest {
     provider.addUser(userTwo);
 
     // The provider is not authoritative for these roles
-    assertEquals("There should be no roles", 0, IteratorUtils.toList(provider.findRoles("%", Role.Target.ALL, 0, 0)).size());
+    assertEquals(
+        "There should be no roles",
+        0,
+        IteratorUtils.toList(provider.findRoles("%", Role.Target.ALL, 0, 0)).size()
+    );
   }
 
   @Test
@@ -309,8 +313,8 @@ public class JpaUserProviderTest {
 
   @Test
   public void testDuplicateUser() {
-    Set<JpaRole> authorities1 = set(new JpaRole("ROLE_COOL_ONE", org1));
-    Set<JpaRole> authorities2 = set(new JpaRole("ROLE_COOL_ONE", org2));
+    set(new JpaRole("ROLE_COOL_ONE", org1));
+    set(new JpaRole("ROLE_COOL_ONE", org2));
     try {
       provider.addUser(createUserWithRoles(org1, "user1", "ROLE_COOL_ONE"));
       provider.addUser(createUserWithRoles(org1, "user2", "ROLE_COOL_ONE"));
@@ -339,7 +343,11 @@ public class JpaUserProviderTest {
     }
 
     // Provider not authoritative for these roles
-    assertEquals("There should be zero roles", 0, IteratorUtils.toList(provider.findRoles("%", Role.Target.ALL, 0, 0)).size());
+    assertEquals(
+        "There should be zero roles",
+        0,
+        IteratorUtils.toList(provider.findRoles("%", Role.Target.ALL, 0, 0)).size()
+    );
 
     List<String> rolesForUser = provider.getRolesForUser("user1").stream()
             .map(Role::getName)

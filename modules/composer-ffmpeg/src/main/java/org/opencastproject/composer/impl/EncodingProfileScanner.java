@@ -32,6 +32,8 @@ import org.opencastproject.util.ReadinessIndicator;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.felix.fileinstall.ArtifactInstaller;
 import org.osgi.framework.BundleContext;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,6 +41,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FilenameFilter;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Dictionary;
 import java.util.HashMap;
@@ -52,6 +56,13 @@ import java.util.Set;
 /**
  * This manager class tries to read encoding profiles from the classpath.
  */
+@Component(
+  property = {
+    "service.description=Encoding Profile Scanner"
+  },
+  immediate = true,
+  service = { EncodingProfileScanner.class, ArtifactInstaller.class }
+)
 public class EncodingProfileScanner implements ArtifactInstaller {
 
   /** Prefix for encoding profile property keys **/
@@ -94,6 +105,7 @@ public class EncodingProfileScanner implements ArtifactInstaller {
    * @param ctx
    *          the bundle context
    */
+  @Activate
   void activate(BundleContext ctx) {
     this.bundleCtx = ctx;
   }
@@ -110,22 +122,6 @@ public class EncodingProfileScanner implements ArtifactInstaller {
   }
 
   /**
-   * Returns the list of profiles that are applicable for the given track type.
-   *
-   * @return the profile definitions
-   */
-  public Map<String, EncodingProfile> getApplicableProfiles(MediaType type) {
-    Map<String, EncodingProfile> result = new HashMap<String, EncodingProfile>();
-    for (Map.Entry<String, EncodingProfile> entry : profiles.entrySet()) {
-      EncodingProfile profile = entry.getValue();
-      if (profile.isApplicableTo(type)) {
-        result.put(entry.getKey(), profile);
-      }
-    }
-    return result;
-  }
-
-  /**
    * Reads the profiles from the given set of properties.
    *
    * @param artifact
@@ -135,8 +131,8 @@ public class EncodingProfileScanner implements ArtifactInstaller {
   Map<String, EncodingProfile> loadFromProperties(File artifact) throws IOException {
     // Format name
     Properties properties = new Properties();
-    try (FileInputStream in = new FileInputStream(artifact)) {
-      properties.load(in);
+    try (InputStreamReader reader = new InputStreamReader(new FileInputStream(artifact), StandardCharsets.UTF_8)) {
+      properties.load(reader);
     }
 
     // Find list of formats in properties

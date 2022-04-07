@@ -21,12 +21,6 @@
 
 package org.opencastproject.event.comment;
 
-import static com.entwinemedia.fn.data.json.Jsons.BLANK;
-import static com.entwinemedia.fn.data.json.Jsons.ZERO;
-import static com.entwinemedia.fn.data.json.Jsons.arr;
-import static com.entwinemedia.fn.data.json.Jsons.f;
-import static com.entwinemedia.fn.data.json.Jsons.obj;
-import static com.entwinemedia.fn.data.json.Jsons.v;
 import static org.opencastproject.util.RequireUtil.notEmpty;
 import static org.opencastproject.util.RequireUtil.notNull;
 
@@ -37,9 +31,6 @@ import org.opencastproject.util.Jsons;
 import org.opencastproject.util.Jsons.Obj;
 import org.opencastproject.util.Jsons.Val;
 import org.opencastproject.util.data.Option;
-
-import com.entwinemedia.fn.data.json.Field;
-import com.entwinemedia.fn.data.json.JValue;
 
 import org.apache.commons.lang3.StringUtils;
 
@@ -117,9 +108,20 @@ public final class EventComment {
    * @throws IllegalArgumentException
    *           if id, text, or author is not set
    */
-  public static EventComment create(Option<Long> id, String eventId, String organization, String text, User author, String reason, boolean resolvedStatus) {
+  public static EventComment create(
+      Option<Long> id,
+      String eventId,
+      String organization,
+      String text,
+      User author,
+      String reason,
+      boolean resolvedStatus
+  ) {
     Date creationDate = new Date();
-    return create(id, eventId, organization, text, author, reason, resolvedStatus, creationDate, creationDate, new ArrayList<EventCommentReply>());
+    return create(
+        id, eventId, organization, text, author, reason, resolvedStatus,
+        creationDate, creationDate, new ArrayList<EventCommentReply>()
+    );
   }
 
   /**
@@ -144,10 +146,20 @@ public final class EventComment {
    * @throws IllegalArgumentException
    *           if id, text, author, creation date or modification date is not set
    */
-  public static EventComment create(Option<Long> id, String eventId, String organization, String text, User author, String reason, boolean resolvedStatus,
-          Date creationDate, Date modificationDate) {
-    return new EventComment(id, eventId, organization, text, author, reason, resolvedStatus, creationDate, modificationDate,
-            new ArrayList<EventCommentReply>());
+  public static EventComment create(
+      Option<Long> id,
+      String eventId,
+      String organization,
+      String text,
+      User author,
+      String reason,
+      boolean resolvedStatus,
+      Date creationDate,
+      Date modificationDate
+  ) {
+    return new EventComment(
+        id, eventId, organization, text, author, reason, resolvedStatus,
+        creationDate, modificationDate, new ArrayList<EventCommentReply>());
   }
 
   /**
@@ -174,13 +186,34 @@ public final class EventComment {
    * @throws IllegalArgumentException
    *           if id, text, author, creation date, modification date or replies is not set
    */
-  public static EventComment create(Option<Long> id, String eventId, String organization, String text, User author, String reason, boolean resolvedStatus,
-          Date creationDate, Date modificationDate, List<EventCommentReply> replies) {
-    return new EventComment(id, eventId, organization, text, author, reason, resolvedStatus, creationDate, modificationDate, replies);
+  public static EventComment create(
+      Option<Long> id,
+      String eventId,
+      String organization,
+      String text,
+      User author,
+      String reason,
+      boolean resolvedStatus,
+      Date creationDate,
+      Date modificationDate,
+      List<EventCommentReply> replies
+  ) {
+    return new EventComment(id, eventId, organization, text, author, reason,
+        resolvedStatus, creationDate, modificationDate, replies);
   }
 
-  private EventComment(Option<Long> id, String eventId, String organization, String text, User author, String reason, boolean resolvedStatus, Date creationDate,
-          Date modificationDate, List<EventCommentReply> replies) {
+  private EventComment(
+      Option<Long> id,
+      String eventId,
+      String organization,
+      String text,
+      User author,
+      String reason,
+      boolean resolvedStatus,
+      Date creationDate,
+      Date modificationDate,
+      List<EventCommentReply> replies
+  ) {
     this.id = notNull(id, "id");
     this.eventId = notEmpty(eventId, "eventId");
     this.organization = notEmpty(organization, "organization");
@@ -307,16 +340,18 @@ public final class EventComment {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o)
+    if (this == o) {
       return true;
-    if (o == null || getClass() != o.getClass())
+    }
+    if (o == null || getClass() != o.getClass()) {
       return false;
+    }
     EventComment comment = (EventComment) o;
 
     return text.equals(comment.getText()) && creationDate.equals(comment.getCreationDate())
-            && modificationDate.equals(comment.getModificationDate()) && author.equals(comment.getAuthor())
-            && (reason == null ? comment.getReason() == null : reason.equals(comment.getReason()))
-            && resolvedStatus == comment.isResolvedStatus();
+        && modificationDate.equals(comment.getModificationDate()) && author.equals(comment.getAuthor())
+        && (reason == null ? comment.getReason() == null : reason.equals(comment.getReason()))
+        && resolvedStatus == comment.isResolvedStatus();
   }
 
   @Override
@@ -339,40 +374,18 @@ public final class EventComment {
     }
 
     Val idValue = Jsons.ZERO_VAL;
-    if (id.isSome())
+    if (id.isSome()) {
       idValue = Jsons.v(id.get());
-
-    return Jsons.obj(Jsons.p("id", idValue), Jsons.p("text", text),
-            Jsons.p("creationDate", DateTimeSupport.toUTC(creationDate.getTime())),
-            Jsons.p("modificationDate", DateTimeSupport.toUTC(modificationDate.getTime())),
-            Jsons.p("author", authorObj), Jsons.p("reason", reason), Jsons.p("resolvedStatus", resolvedStatus),
-            Jsons.p("replies", Jsons.arr(replyArr)));
-  }
-
-  public JValue toJValue() {
-    JValue authorObj = obj(f("name", v(author.getName(), BLANK)), f("username", v(author.getUsername())),
-            f("email", v(author.getEmail(), BLANK)));
-
-    List<JValue> replyArr = new ArrayList<JValue>();
-    for (EventCommentReply reply : replies) {
-      replyArr.add(reply.toJValue());
     }
 
-    JValue idValue = ZERO;
-    if (id.isSome())
-      idValue = v(id.get());
-
-    List<Field> fields = new ArrayList<Field>();
-    fields.add(f("id", idValue));
-    fields.add(f("text", v(text)));
-    fields.add(f("creationDate", v(DateTimeSupport.toUTC(creationDate.getTime()))));
-    fields.add(f("modificationDate", v(DateTimeSupport.toUTC(modificationDate.getTime()))));
-    fields.add(f("author", authorObj));
-    fields.add(f("reason", v(reason)));
-    fields.add(f("resolvedStatus", v(resolvedStatus)));
-    fields.add(f("replies", arr(replyArr)));
-
-    return obj(fields);
+    return Jsons.obj(
+        Jsons.p("id", idValue),
+        Jsons.p("text", text),
+        Jsons.p("creationDate", DateTimeSupport.toUTC(creationDate.getTime())),
+        Jsons.p("modificationDate", DateTimeSupport.toUTC(modificationDate.getTime())),
+        Jsons.p("author", authorObj), Jsons.p("reason", reason), Jsons.p("resolvedStatus", resolvedStatus),
+        Jsons.p("replies", Jsons.arr(replyArr))
+    );
   }
 
 }

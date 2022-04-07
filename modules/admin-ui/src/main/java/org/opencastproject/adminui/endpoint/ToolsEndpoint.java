@@ -32,12 +32,10 @@ import static java.util.Objects.requireNonNull;
 import static javax.servlet.http.HttpServletResponse.SC_INTERNAL_SERVER_ERROR;
 import static javax.servlet.http.HttpServletResponse.SC_NOT_FOUND;
 import static javax.servlet.http.HttpServletResponse.SC_OK;
-import static org.apache.commons.lang3.exception.ExceptionUtils.getStackTrace;
 import static org.opencastproject.util.data.Tuple.tuple;
 
 import org.opencastproject.adminui.impl.AdminUIConfiguration;
 import org.opencastproject.adminui.impl.ThumbnailImpl;
-import org.opencastproject.adminui.index.AdminUISearchIndex;
 import org.opencastproject.assetmanager.api.AssetManager;
 import org.opencastproject.assetmanager.api.AssetManagerException;
 import org.opencastproject.assetmanager.util.WorkflowPropertiesUtil;
@@ -45,12 +43,13 @@ import org.opencastproject.assetmanager.util.Workflows;
 import org.opencastproject.composer.api.ComposerService;
 import org.opencastproject.composer.api.EncoderException;
 import org.opencastproject.distribution.api.DistributionException;
+import org.opencastproject.elasticsearch.api.SearchIndexException;
+import org.opencastproject.elasticsearch.index.ElasticsearchIndex;
+import org.opencastproject.elasticsearch.index.objects.event.Event;
 import org.opencastproject.index.service.api.IndexService;
 import org.opencastproject.index.service.api.IndexService.Source;
 import org.opencastproject.index.service.exception.IndexServiceException;
-import org.opencastproject.index.service.impl.index.event.Event;
 import org.opencastproject.index.service.util.RestUtils;
-import org.opencastproject.matterhorn.search.SearchIndexException;
 import org.opencastproject.mediapackage.Attachment;
 import org.opencastproject.mediapackage.Catalog;
 import org.opencastproject.mediapackage.MediaPackage;
@@ -113,8 +112,11 @@ import org.apache.commons.lang3.BooleanUtils;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
-import org.osgi.service.cm.ConfigurationException;
-import org.osgi.service.cm.ManagedService;
+import org.osgi.service.component.ComponentContext;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Modified;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.SAXException;
@@ -160,7 +162,16 @@ import javax.xml.bind.JAXBException;
               + "<em>This service is for exclusive use by the module admin-ui. Its API might change "
               + "anytime without prior notice. Any dependencies other than the admin UI will be strictly ignored. "
               + "DO NOT use this for integration of third-party applications.<em>"})
-public class ToolsEndpoint implements ManagedService {
+@Component(
+        immediate = true,
+        service = ToolsEndpoint.class,
+        property = {
+                "service.description=Admin UI - Tools Endpoint",
+                "opencast.service.type=org.opencastproject.adminui.ToolsEndpoint",
+                "opencast.service.path=/admin-ng/tools",
+        }
+)
+public class ToolsEndpoint {
   /** The logging facility */
   private static final Logger logger = LoggerFactory.getLogger(ToolsEndpoint.class);
 
@@ -206,7 +217,7 @@ public class ToolsEndpoint implements ManagedService {
 
   // service references
   private AdminUIConfiguration adminUIConfiguration;
-  private AdminUISearchIndex searchIndex;
+  private ElasticsearchIndex searchIndex;
   private AssetManager assetManager;
   private ComposerService composerService;
   private IndexService index;
@@ -219,68 +230,74 @@ public class ToolsEndpoint implements ManagedService {
   private Workspace workspace;
   private boolean thumbnailEnabled = true;
 
-  void setConfigurablePublicationService(ConfigurablePublicationService configurablePublicationService) {
+  /** OSGi DI. */
+  @Reference
+  public void setConfigurablePublicationService(ConfigurablePublicationService configurablePublicationService) {
     this.configurablePublicationService = configurablePublicationService;
   }
 
-  /** OSGi DI. */
-  void setAdminUIConfiguration(AdminUIConfiguration adminUIConfiguration) {
+  @Reference
+  public void setAdminUIConfiguration(AdminUIConfiguration adminUIConfiguration) {
     this.adminUIConfiguration = adminUIConfiguration;
   }
 
-  /** OSGi DI */
-  void setAdminUISearchIndex(AdminUISearchIndex adminUISearchIndex) {
-    this.searchIndex = adminUISearchIndex;
+  @Reference
+  void setElasticsearchIndex(ElasticsearchIndex elasticsearchIndex) {
+    this.searchIndex = elasticsearchIndex;
   }
 
-  /** OSGi DI */
-  void setAssetManager(AssetManager assetManager) {
+  @Reference
+  public void setAssetManager(AssetManager assetManager) {
     this.assetManager = assetManager;
   }
 
-  /** OSGi DI */
-  void setIndexService(IndexService index) {
+  /** OSGi DI. */
+  @Reference
+  public void setIndexService(IndexService index) {
     this.index = index;
   }
 
-  /** OSGi DI */
-  void setOaiPmhPublicationService(OaiPmhPublicationService oaiPmhPublicationService) {
+  /** OSGi DI. */
+  @Reference
+  public void setOaiPmhPublicationService(OaiPmhPublicationService oaiPmhPublicationService) {
     this.oaiPmhPublicationService = oaiPmhPublicationService;
   }
 
-  /** OSGi DI */
-  void setSecurityService(SecurityService securityService) {
+  @Reference
+  public void setSecurityService(SecurityService securityService) {
     this.securityService = securityService;
   }
 
-  /** OSGi DI */
-  void setSmilService(SmilService smilService) {
+  @Reference
+  public void setSmilService(SmilService smilService) {
     this.smilService = smilService;
   }
 
-  /** OSGi DI */
-  void setUrlSigningService(UrlSigningService urlSigningService) {
+  @Reference
+  public void setUrlSigningService(UrlSigningService urlSigningService) {
     this.urlSigningService = urlSigningService;
   }
 
-  /** OSGi DI */
-  void setWorkflowService(WorkflowService workflowService) {
+  @Reference
+  public void setWorkflowService(WorkflowService workflowService) {
     this.workflowService = workflowService;
   }
 
-  /** OSGi DI */
-  void setWorkspace(Workspace workspace) {
+  @Reference
+  public void setWorkspace(Workspace workspace) {
     this.workspace = workspace;
   }
 
-  /** OSGi DI */
-  void setComposerService(ComposerService composerService) {
+  @Reference
+  public void setComposerService(ComposerService composerService) {
     this.composerService = composerService;
   }
 
   /** OSGi callback if properties file is present */
-  @Override
-  public void updated(Dictionary<String, ?> properties) throws ConfigurationException {
+  @Activate
+  @Modified
+  public void activate(ComponentContext cc) {
+    Dictionary<String, Object> properties = cc.getProperties();
     if (properties == null) {
       logger.info("No configuration available, using defaults");
       return;
@@ -292,12 +309,13 @@ public class ToolsEndpoint implements ManagedService {
 
     thumbnailEnabled = BooleanUtils.toBoolean(Objects.toString(properties.get(OPT_THUMBNAIL_ENABLED), "false"));
     logger.debug("Thumbnail feature enabled: {}", thumbnailEnabled);
+    logger.info("Configuration updated");
   }
 
   @GET
   @Path("{mediapackageid}.json")
   @RestQuery(name = "getAvailableTools", description = "Returns a list of tools which are currently available for the given media package.", returnDescription = "A JSON array with tools identifiers", pathParameters = {
-          @RestParameter(name = "mediapackageid", description = "The id of the media package", isRequired = true, type = RestParameter.Type.STRING) }, reponses = {
+          @RestParameter(name = "mediapackageid", description = "The id of the media package", isRequired = true, type = RestParameter.Type.STRING) }, responses = {
                   @RestResponse(description = "Available tools evaluated", responseCode = HttpServletResponse.SC_OK) })
   public Response getAvailableTools(@PathParam("mediapackageid") final String mediaPackageId) {
     final List<JValue> jTools = new ArrayList<>();
@@ -350,7 +368,7 @@ public class ToolsEndpoint implements ManagedService {
   @Path("{mediapackageid}/editor.json")
   @Produces(MediaType.APPLICATION_JSON)
   @RestQuery(name = "getVideoEditor", description = "Returns all the information required to get the editor tool started", returnDescription = "JSON object", pathParameters = {
-          @RestParameter(name = "mediapackageid", description = "The id of the media package", isRequired = true, type = RestParameter.Type.STRING) }, reponses = {
+          @RestParameter(name = "mediapackageid", description = "The id of the media package", isRequired = true, type = RestParameter.Type.STRING) }, responses = {
                   @RestResponse(description = "Media package found", responseCode = SC_OK),
                   @RestResponse(description = "Media package not found", responseCode = SC_NOT_FOUND) })
   public Response getVideoEditor(@PathParam("mediapackageid") final String mediaPackageId)
@@ -581,7 +599,7 @@ public class ToolsEndpoint implements ManagedService {
         f("url", signIfNecessary(distributedElement.getURI()))
       ))));
     } catch (IOException | FileUploadException e) {
-      logger.error("Error reading request body: {}", getStackTrace(e));
+      logger.error("Error reading request body:", e);
       return R.serverError();
     } catch (PublicationException | UnknownFileTypeException | EncoderException e) {
       logger.error("Could not generate or publish thumbnail", e);
@@ -593,7 +611,7 @@ public class ToolsEndpoint implements ManagedService {
   @Path("{mediapackageid}/editor.json")
   @Consumes(MediaType.APPLICATION_JSON)
   @RestQuery(name = "editVideo", description = "Takes editing information from the client side and processes it", returnDescription = "", pathParameters = {
-          @RestParameter(name = "mediapackageid", description = "The id of the media package", isRequired = true, type = RestParameter.Type.STRING) }, reponses = {
+          @RestParameter(name = "mediapackageid", description = "The id of the media package", isRequired = true, type = RestParameter.Type.STRING) }, responses = {
                   @RestResponse(description = "Editing information saved and processed", responseCode = HttpServletResponse.SC_OK),
                   @RestResponse(description = "Media package not found", responseCode = HttpServletResponse.SC_NOT_FOUND),
                   @RestResponse(description = "The editing information cannot be parsed", responseCode = HttpServletResponse.SC_BAD_REQUEST) })
@@ -603,7 +621,7 @@ public class ToolsEndpoint implements ManagedService {
     try (InputStream is = request.getInputStream()) {
       details = IOUtils.toString(is, request.getCharacterEncoding());
     } catch (IOException e) {
-      logger.error("Error reading request body: {}", getStackTrace(e));
+      logger.error("Error reading request body:", e);
       return R.serverError();
     }
 
@@ -630,7 +648,7 @@ public class ToolsEndpoint implements ManagedService {
       try {
         smil = createSmilCuttingCatalog(editingInfo, mediaPackage);
       } catch (Exception e) {
-        logger.warn("Unable to create a SMIL cutting catalog ({}): {}", details, getStackTrace(e));
+        logger.warn("Unable to create a SMIL cutting catalog ({}):", details, e);
         return R.badRequest("Unable to create SMIL cutting catalog");
       }
 
@@ -651,7 +669,7 @@ public class ToolsEndpoint implements ManagedService {
       try {
         addSmilToArchive(mediaPackage, smil);
       } catch (IOException e) {
-        logger.warn("Unable to add SMIL cutting catalog to archive: {}", getStackTrace(e));
+        logger.warn("Unable to add SMIL cutting catalog to archive:", e);
         return R.serverError();
       }
 
@@ -667,10 +685,11 @@ public class ToolsEndpoint implements ManagedService {
               .chooseDefaultThumbnail(mediaPackage, editingInfo.getDefaultThumbnailPosition().getAsDouble());
           }
         } catch (UrlSigningException | URISyntaxException e) {
-          logger.error("Error while trying to serialize the thumbnail url because: {}", getStackTrace(e));
+          logger.error("Error while trying to serialize the thumbnail url because:", e);
           return R.serverError();
-        } catch (IOException | EncoderException | PublicationException | UnknownFileTypeException | MediaPackageException | DistributionException e) {
-          logger.error("Error while updating default thumbnail because: {}", getStackTrace(e));
+        } catch (IOException | DistributionException | EncoderException | PublicationException
+            | UnknownFileTypeException | MediaPackageException e) {
+          logger.error("Error while updating default thumbnail because:", e);
           return R.serverError();
         }
       }
@@ -679,17 +698,17 @@ public class ToolsEndpoint implements ManagedService {
         final String workflowId = editingInfo.getPostProcessingWorkflow().get();
         try {
           final Map<String, String> workflowParameters = WorkflowPropertiesUtil
-            .getLatestWorkflowProperties(assetManager, mediaPackage.getIdentifier().compact());
+            .getLatestWorkflowProperties(assetManager, mediaPackage.getIdentifier().toString());
           final Workflows workflows = new Workflows(assetManager, workflowService);
           workflows.applyWorkflowToLatestVersion($(mediaPackage.getIdentifier().toString()),
             ConfiguredWorkflow.workflow(workflowService.getWorkflowDefinitionById(workflowId), workflowParameters))
             .run();
         } catch (AssetManagerException e) {
-          logger.warn("Unable to start workflow '{}' on archived media package '{}': {}",
-                  workflowId, mediaPackage, getStackTrace(e));
+          logger.warn("Unable to start workflow '{}' on archived media package '{}':",
+                  workflowId, mediaPackage, e);
           return R.serverError();
         } catch (WorkflowDatabaseException e) {
-          logger.warn("Unable to load workflow '{}' from workflow service: {}", workflowId, getStackTrace(e));
+          logger.warn("Unable to load workflow '{}' from workflow service:", workflowId, e);
           return R.serverError();
         } catch (NotFoundException e) {
           logger.warn("Workflow '{}' not found", workflowId);
@@ -778,7 +797,7 @@ public class ToolsEndpoint implements ManagedService {
     //get the first smil/cutting  catalog-ID to overwrite it with new smil info
     for (Catalog p: catalogs) {
        if (p.getFlavor().matches(mediaPackageElementFlavor)) {
-         logger.debug("Set Idendifier for Smil-Catalog to: " + p.getIdentifier());
+         logger.debug("Set Identifier for Smil-Catalog to: {}", p.getIdentifier());
          catalogId = p.getIdentifier();
        break;
        }
@@ -787,7 +806,7 @@ public class ToolsEndpoint implements ManagedService {
 
     URI smilURI;
     try (InputStream is = IOUtils.toInputStream(smil.toXML(), "UTF-8")) {
-      smilURI = workspace.put(mediaPackage.getIdentifier().compact(), catalogId, TARGET_FILE_NAME, is);
+      smilURI = workspace.put(mediaPackage.getIdentifier().toString(), catalogId, TARGET_FILE_NAME, is);
     } catch (SAXException e) {
       logger.error("Error while serializing the SMIL catalog to XML: {}", e.getMessage());
       throw new IOException(e);
@@ -857,7 +876,7 @@ public class ToolsEndpoint implements ManagedService {
     try {
       return index.getEvent(mediaPackageId, searchIndex);
     } catch (SearchIndexException e) {
-      logger.error("Error while reading event '{}' from search index: {}", mediaPackageId, getStackTrace(e));
+      logger.error("Error while reading event '{}' from search index:", mediaPackageId, e);
       return Opt.none();
     }
   }
@@ -900,7 +919,7 @@ public class ToolsEndpoint implements ManagedService {
     try {
       workflows = workflowService.listAvailableWorkflowDefinitions();
     } catch (WorkflowDatabaseException e) {
-      logger.warn("Error while retrieving list of workflow definitions: {}", getStackTrace(e));
+      logger.warn("Error while retrieving list of workflow definitions:", e);
       return emptyList();
     }
 
@@ -926,11 +945,11 @@ public class ToolsEndpoint implements ManagedService {
         Smil smil = smilService.fromXml(workspace.get(smilCatalog.getURI())).getSmil();
         segments = mergeSegments(segments, getSegmentsFromSmil(smil));
       } catch (NotFoundException e) {
-        logger.warn("File '{}' could not be loaded by workspace service: {}", smilCatalog.getURI(), getStackTrace(e));
+        logger.warn("File '{}' could not be loaded by workspace service:", smilCatalog.getURI(), e);
       } catch (IOException e) {
-        logger.warn("Reading file '{}' from workspace service failed: {}", smilCatalog.getURI(), getStackTrace(e));
+        logger.warn("Reading file '{}' from workspace service failed:", smilCatalog.getURI(), e);
       } catch (SmilException e) {
-        logger.warn("Error while parsing SMIL catalog '{}': {}", smilCatalog.getURI(), getStackTrace(e));
+        logger.warn("Error while parsing SMIL catalog '{}':", smilCatalog.getURI(), e);
       }
     }
 
@@ -943,11 +962,11 @@ public class ToolsEndpoint implements ManagedService {
         Smil smil = smilService.fromXml(workspace.get(smilCatalog.getURI())).getSmil();
         segments = getSegmentsFromSmil(smil);
       } catch (NotFoundException e) {
-        logger.warn("File '{}' could not be loaded by workspace service: {}", smilCatalog.getURI(), getStackTrace(e));
+        logger.warn("File '{}' could not be loaded by workspace service:", smilCatalog.getURI(), e);
       } catch (IOException e) {
-        logger.warn("Reading file '{}' from workspace service failed: {}", smilCatalog.getURI(), getStackTrace(e));
+        logger.warn("Reading file '{}' from workspace service failed:", smilCatalog.getURI(), e);
       } catch (SmilException e) {
-        logger.warn("Error while parsing SMIL catalog '{}': {}", smilCatalog.getURI(), getStackTrace(e));
+        logger.warn("Error while parsing SMIL catalog '{}':", smilCatalog.getURI(), e);
       }
     }
 

@@ -28,6 +28,7 @@ import org.opencastproject.security.api.SecurityConstants;
 import org.opencastproject.security.api.UserProvider;
 import org.opencastproject.util.NotFoundException;
 
+import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.ServiceRegistration;
@@ -42,6 +43,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Dictionary;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.management.MalformedObjectNameException;
@@ -62,7 +64,7 @@ public class MoodleUserProviderFactory implements ManagedServiceFactory {
   private static final Logger logger = LoggerFactory.getLogger(MoodleUserProviderFactory.class);
 
   /**
-   * The key to look up the organization identifer in the service configuration properties
+   * The key to look up the organization identifier in the service configuration properties
    */
   private static final String ORGANIZATION_KEY = "org.opencastproject.userdirectory.moodle.org";
 
@@ -106,6 +108,14 @@ public class MoodleUserProviderFactory implements ManagedServiceFactory {
    */
   private static final String GROUP_PATTERN_KEY = "org.opencastproject.userdirectory.moodle.group.pattern";
 
+  /** Key specifying if usernames should be converted to lowercase */
+  private static final String LOWERCASE_USERNAME = "org.opencastproject.userdirectory.moodle.user.lowercase.conversion";
+
+  /**
+   * Key for configuring a context role prefix
+   */
+  private static final String CONTEXT_ROLE_PREFIX = "org.opencastproject.userdirectory.moodle.context.role.prefix";
+
   /**
    * The OSGI bundle context
    */
@@ -129,7 +139,7 @@ public class MoodleUserProviderFactory implements ManagedServiceFactory {
    * @throws NullPointerException
    * @throws MalformedObjectNameException
    */
-  public static final ObjectName getObjectName(String pid) throws MalformedObjectNameException, NullPointerException {
+  public static ObjectName getObjectName(String pid) throws MalformedObjectNameException, NullPointerException {
     return new ObjectName(pid + ":type=MoodleRequests");
   }
 
@@ -169,16 +179,20 @@ public class MoodleUserProviderFactory implements ManagedServiceFactory {
   public void updated(String pid, Dictionary properties) throws ConfigurationException {
     logger.debug("updated MoodleUserProviderFactory");
 
-    String adminUserName = StringUtils.trimToNull(bundleContext.getProperty(SecurityConstants.GLOBAL_ADMIN_USER_PROPERTY));
+    String adminUserName = StringUtils.trimToNull(
+        bundleContext.getProperty(SecurityConstants.GLOBAL_ADMIN_USER_PROPERTY)
+    );
 
     String organization = (String) properties.get(ORGANIZATION_KEY);
-    if (StringUtils.isBlank(organization))
+    if (StringUtils.isBlank(organization)) {
       throw new ConfigurationException(ORGANIZATION_KEY, "is not set");
+    }
 
     String urlStr = (String) properties.get(MOODLE_URL_KEY);
     URI url;
-    if (StringUtils.isBlank(urlStr))
+    if (StringUtils.isBlank(urlStr)) {
       throw new ConfigurationException(MOODLE_URL_KEY, "is not set");
+    }
     try {
       url = new URI(urlStr);
     } catch (URISyntaxException e) {
@@ -186,38 +200,43 @@ public class MoodleUserProviderFactory implements ManagedServiceFactory {
     }
 
     String token = (String) properties.get(MOODLE_TOKEN_KEY);
-    if (StringUtils.isBlank(token))
+    if (StringUtils.isBlank(token)) {
       throw new ConfigurationException(MOODLE_TOKEN_KEY, "is not set");
+    }
 
-    boolean groupRoles = false;
-    String groupRolesStr = (String) properties.get(GROUP_ROLES_KEY);
-    if ("true".equals(groupRolesStr))
-      groupRoles = true;
+    final String groupRolesStr = (String) properties.get(GROUP_ROLES_KEY);
+    final boolean groupRoles = BooleanUtils.toBoolean(groupRolesStr);
 
     String coursePattern = (String) properties.get(COURSE_PATTERN_KEY);
     String userPattern = (String) properties.get(USER_PATTERN_KEY);
     String groupPattern = (String) properties.get(GROUP_PATTERN_KEY);
+    final boolean lowercaseUsername = BooleanUtils.toBoolean((String) properties.get(LOWERCASE_USERNAME));
+
+    final String contextRolePrefix = Objects.toString(properties.get(CONTEXT_ROLE_PREFIX), "");
 
     int cacheSize = 1000;
     try {
-      if (properties.get(CACHE_SIZE) != null)
+      if (properties.get(CACHE_SIZE) != null) {
         cacheSize = Integer.parseInt(properties.get(CACHE_SIZE).toString());
+      }
     } catch (NumberFormatException e) {
       logger.warn("{} could not be loaded, default value is used: {}", CACHE_SIZE, cacheSize);
     }
 
     int cacheExpiration = 60;
     try {
-      if (properties.get(CACHE_EXPIRATION) != null)
+      if (properties.get(CACHE_EXPIRATION) != null) {
         cacheExpiration = Integer.parseInt(properties.get(CACHE_EXPIRATION).toString());
+      }
     } catch (NumberFormatException e) {
       logger.warn("{} could not be loaded, default value is used: {}", CACHE_EXPIRATION, cacheExpiration);
     }
 
     // Now that we have everything we need, go ahead and activate a new provider, removing an old one if necessary
     ServiceRegistration existingRegistration = providerRegistrations.remove(pid);
-    if (existingRegistration != null)
+    if (existingRegistration != null) {
       existingRegistration.unregister();
+    }
 
     Organization org;
     try {
@@ -229,7 +248,8 @@ public class MoodleUserProviderFactory implements ManagedServiceFactory {
 
     logger.debug("creating new MoodleUserProviderInstance for pid=" + pid);
     MoodleUserProviderInstance provider = new MoodleUserProviderInstance(pid, new MoodleWebServiceImpl(url, token), org,
-            coursePattern, userPattern, groupPattern, groupRoles, cacheSize, cacheExpiration, adminUserName);
+        coursePattern, userPattern, groupPattern, groupRoles, cacheSize, cacheExpiration, adminUserName,
+        lowercaseUsername, contextRolePrefix);
 
     providerRegistrations.put(pid, bundleContext.registerService(UserProvider.class.getName(), provider, null));
     providerRegistrations.put(pid, bundleContext.registerService(RoleProvider.class.getName(), provider, null));

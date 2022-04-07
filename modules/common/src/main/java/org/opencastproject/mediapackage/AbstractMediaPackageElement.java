@@ -391,14 +391,6 @@ public abstract class AbstractMediaPackageElement implements MediaPackageElement
   }
 
   /**
-   * @see org.opencastproject.mediapackage.MediaPackageElement#referTo(org.opencastproject.mediapackage.MediaPackage)
-   */
-  @Override
-  public void referTo(MediaPackage mediaPackage) {
-    referTo(new MediaPackageReferenceImpl(mediaPackage));
-  }
-
-  /**
    * @see org.opencastproject.mediapackage.MediaPackageElement#referTo(org.opencastproject.mediapackage.MediaPackageElement)
    */
   @Override
@@ -570,7 +562,10 @@ public abstract class AbstractMediaPackageElement implements MediaPackageElement
       marshaller.marshal(this, out);
       Unmarshaller unmarshaller = MediaPackageImpl.context.createUnmarshaller();
       in = new ByteArrayInputStream(out.toByteArray());
+      // CHECKSTYLE:OFF
+      // in was already parsed and is therefore save
       return unmarshaller.unmarshal(in);
+      // CHECKSTYLE:ON
     } catch (JAXBException e) {
       throw new RuntimeException(e.getLinkedException() != null ? e.getLinkedException() : e);
     } finally {

@@ -46,7 +46,6 @@ import org.opencastproject.mediapackage.MediaPackageParser;
 import org.opencastproject.mediapackage.MediaPackageSupport;
 import org.opencastproject.mediapackage.Track;
 import org.opencastproject.mediapackage.identifier.IdImpl;
-import org.opencastproject.mediapackage.identifier.UUIDIdBuilderImpl;
 import org.opencastproject.metadata.dublincore.DCMIPeriod;
 import org.opencastproject.metadata.dublincore.DublinCore;
 import org.opencastproject.metadata.dublincore.DublinCoreCatalog;
@@ -60,7 +59,6 @@ import org.opencastproject.security.api.SecurityService;
 import org.opencastproject.security.api.TrustedHttpClient;
 import org.opencastproject.security.api.UnauthorizedException;
 import org.opencastproject.security.api.UserDirectoryService;
-import org.opencastproject.security.util.StandAloneTrustedHttpClientImpl;
 import org.opencastproject.series.api.SeriesService;
 import org.opencastproject.serviceregistry.api.ServiceRegistry;
 import org.opencastproject.serviceregistry.api.ServiceRegistryException;
@@ -71,6 +69,7 @@ import org.opencastproject.util.LoadUtil;
 import org.opencastproject.util.MimeTypes;
 import org.opencastproject.util.NotFoundException;
 import org.opencastproject.util.ProgressInputStream;
+import org.opencastproject.util.XmlSafeParser;
 import org.opencastproject.util.XmlUtil;
 import org.opencastproject.util.data.Function;
 import org.opencastproject.util.data.Option;
@@ -97,32 +96,40 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.cxf.jaxrs.ext.multipart.ContentDisposition;
 import org.apache.http.Header;
 import org.apache.http.HttpResponse;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.CredentialsProvider;
+import org.apache.http.client.config.AuthSchemes;
 import org.apache.http.client.methods.HttpGet;
-import org.jdom.Document;
-import org.jdom.Element;
-import org.jdom.JDOMException;
-import org.jdom.Namespace;
-import org.jdom.filter.ElementFilter;
-import org.jdom.input.SAXBuilder;
-import org.jdom.output.XMLOutputter;
+import org.apache.http.impl.client.BasicCredentialsProvider;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
 import org.osgi.service.cm.ManagedService;
 import org.osgi.service.component.ComponentContext;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
+import org.osgi.service.component.annotations.ReferencePolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.xml.sax.SAXException;
 
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.Dictionary;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -130,12 +137,24 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import javax.management.ObjectInstance;
 
 /**
  * Creates and augments Opencast MediaPackages. Stores media into the Working File Repository.
  */
+@Component(
+  immediate = true,
+  service = {
+    IngestService.class,
+    ManagedService.class
+  },
+  property = {
+    "service.description=Ingest Service",
+    "service.pid=org.opencastproject.ingest.impl.IngestServiceImpl"
+  }
+)
 public class IngestServiceImpl extends AbstractJobProducer implements IngestService, ManagedService {
 
   /** The logger */
@@ -205,6 +224,9 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
 
   /** The default is not to automatically skip attachments and catalogs from capture agent */
   public static final boolean DEFAULT_SKIP = false;
+
+  /** The maximum length of filenames ingested by Opencast */
+  public static final int FILENAME_LENGTH_MAX = 75;
 
   /** Managed Property key to allow Opencast series modification during ingest
    * Deprecated, the param potentially causes an update chain reaction for all
@@ -293,6 +315,8 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
   private boolean skipCatalogs = DEFAULT_SKIP;
   private boolean skipAttachments = DEFAULT_SKIP;
 
+  protected boolean testMode = false;
+
   /**
    * Creates a new ingest service instance.
    */
@@ -307,6 +331,7 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
    *          the osgi component context
    */
   @Override
+  @Activate
   public void activate(ComponentContext cc) {
     super.activate(cc);
     logger.info("Ingest Service started.");
@@ -320,6 +345,7 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
   /**
    * Callback from OSGi on service deactivation.
    */
+  @Deactivate
   public void deactivate() {
     JmxUtil.unregisterMXBean(registerMXBean);
   }
@@ -368,6 +394,7 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
    * @param httpClient
    *          the http client
    */
+  @Reference
   public void setHttpClient(TrustedHttpClient httpClient) {
     this.httpClient = httpClient;
   }
@@ -378,6 +405,7 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
    * @param serviceRegistry
    *          the serviceRegistry to set
    */
+  @Reference
   public void setServiceRegistry(ServiceRegistry serviceRegistry) {
     this.serviceRegistry = serviceRegistry;
   }
@@ -388,16 +416,11 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
    * @param mediaInspectionService
    *          the media inspection service to set
    */
+  @Reference
   public void setMediaInspectionService(MediaInspectionService mediaInspectionService) {
     this.mediaInspectionService = mediaInspectionService;
   }
 
-  /**
-   * {@inheritDoc}
-   *
-   * @see org.opencastproject.ingest.api.IngestService#addZippedMediaPackage(java.io.InputStream)
-   */
-  @Override
   public WorkflowInstance addZippedMediaPackage(InputStream zipStream)
           throws IngestException, IOException, MediaPackageException {
     try {
@@ -407,22 +430,6 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
     }
   }
 
-  /**
-   * {@inheritDoc}
-   *
-   * @see org.opencastproject.ingest.api.IngestService#addZippedMediaPackage(java.io.InputStream, java.lang.String)
-   */
-  @Override
-  public WorkflowInstance addZippedMediaPackage(InputStream zipStream, String wd)
-          throws MediaPackageException, IOException, IngestException, NotFoundException {
-    return addZippedMediaPackage(zipStream, wd, null);
-  }
-
-  /**
-   * {@inheritDoc}
-   *
-   * @see org.opencastproject.ingest.api.IngestService#addZippedMediaPackage(java.io.InputStream, java.lang.String)
-   */
   @Override
   public WorkflowInstance addZippedMediaPackage(InputStream zipStream, String wd, Map<String, String> workflowConfig)
           throws MediaPackageException, IOException, IngestException, NotFoundException {
@@ -494,8 +501,9 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
             continue;
 
           if (entry.getName().endsWith("manifest.xml") || entry.getName().endsWith("index.xml")) {
-            // Build the mediapackage
-            mp = loadMediaPackageFromManifest(new ZipEntryInputStream(zis, entry.getSize()));
+            // Build the media package
+            final InputStream is = new ZipEntryInputStream(zis, entry.getSize());
+            mp = MediaPackageParser.getFromXml(IOUtils.toString(is, StandardCharsets.UTF_8));
           } else {
             logger.info("Storing zip entry {}/{} in working file repository collection '{}'", job.getId(),
                     entry.getName(), wfrCollectionId);
@@ -535,7 +543,7 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
 
       // Determine the mediapackage identifier
       if (mp.getIdentifier() == null || isBlank(mp.getIdentifier().toString()))
-        mp.setIdentifier(new UUIDIdBuilderImpl().createNew());
+        mp.setIdentifier(IdImpl.fromUUID());
 
       String mediaPackageId = mp.getIdentifier().toString();
 
@@ -589,50 +597,6 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
     }
   }
 
-  private MediaPackage loadMediaPackageFromManifest(InputStream manifest)
-          throws IOException, MediaPackageException, IngestException {
-    // TODO: Uncomment the following line and remove the patch when the compatibility with pre-1.4 MediaPackages is
-    // discarded
-    //
-    // mp = builder.loadFromXml(manifestStream);
-    //
-    // =========================================================================================
-    // =================================== PATCH BEGIN =========================================
-    // =========================================================================================
-    ByteArrayOutputStream baos = null;
-    ByteArrayInputStream bais = null;
-    try {
-      Document domMP = new SAXBuilder().build(manifest);
-      String mpNSUri = "http://mediapackage.opencastproject.org";
-
-      Namespace oldNS = domMP.getRootElement().getNamespace();
-      Namespace newNS = Namespace.getNamespace(oldNS.getPrefix(), mpNSUri);
-
-      if (!newNS.equals(oldNS)) {
-        @SuppressWarnings("rawtypes")
-        Iterator it = domMP.getDescendants(new ElementFilter(oldNS));
-        while (it.hasNext()) {
-          Element elem = (Element) it.next();
-          elem.setNamespace(newNS);
-        }
-      }
-
-      baos = new ByteArrayOutputStream();
-      new XMLOutputter().output(domMP, baos);
-      bais = new ByteArrayInputStream(baos.toByteArray());
-      return MediaPackageParser.getFromXml(IOUtils.toString(bais, "UTF-8"));
-    } catch (JDOMException e) {
-      throw new IngestException("Error unmarshalling mediapackage", e);
-    } finally {
-      IOUtils.closeQuietly(bais);
-      IOUtils.closeQuietly(baos);
-      IOUtils.closeQuietly(manifest);
-    }
-    // =========================================================================================
-    // =================================== PATCH END ===========================================
-    // =========================================================================================
-  }
-
   /**
    * {@inheritDoc}
    *
@@ -663,7 +627,7 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
     MediaPackage mediaPackage;
     try {
       mediaPackage = MediaPackageBuilderFactory.newInstance().newMediaPackageBuilder()
-              .createNew(new UUIDIdBuilderImpl().fromString(mediaPackageId));
+              .createNew(new IdImpl(mediaPackageId));
     } catch (MediaPackageException e) {
       logger.error("INGEST:Failed to create media package " + e.getLocalizedMessage());
       throw e;
@@ -762,13 +726,18 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
       job = serviceRegistry.updateJob(job);
       String elementId = UUID.randomUUID().toString();
       logger.info("Start adding track {} from input stream on mediapackage {}", elementId, mediaPackage);
+      if (fileName.length() > FILENAME_LENGTH_MAX) {
+        final String extension = "." + FilenameUtils.getExtension(fileName);
+        final int length = Math.max(0, FILENAME_LENGTH_MAX - extension.length());
+        fileName = fileName.substring(0, length) + extension;
+      }
       URI newUrl = addContentToRepo(mediaPackage, elementId, fileName, in);
       MediaPackage mp = addContentToMediaPackage(mediaPackage, elementId, newUrl, MediaPackageElement.Type.Track,
               flavor);
       if (tags != null && tags.length > 0) {
         MediaPackageElement trackElement = mp.getTrack(elementId);
         for (String tag : tags) {
-          logger.info("Adding Tag: " + tag + " to Element: " + elementId);
+          logger.debug("Adding tag `{}` to element {}", tag, elementId);
           trackElement.addTag(tag);
         }
       }
@@ -957,15 +926,39 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
    */
   @Override
   public MediaPackage addCatalog(InputStream in, String fileName, MediaPackageElementFlavor flavor, String[] tags,
-          MediaPackage mediaPackage) throws IOException, IngestException {
+          MediaPackage mediaPackage) throws IOException, IngestException, IllegalArgumentException {
     Job job = null;
     try {
       job = serviceRegistry.createJob(JOB_TYPE, INGEST_CATALOG, null, null, false, ingestFileJobLoad);
       job.setStatus(Status.RUNNING);
       job = serviceRegistry.updateJob(job);
-      String elementId = UUID.randomUUID().toString();
-      logger.info("Start adding catalog {} from input stream on mediapackage {}", elementId, mediaPackage);
-      URI newUrl = addContentToRepo(mediaPackage, elementId, fileName, in);
+      final String elementId = UUID.randomUUID().toString();
+      final String mediaPackageId = mediaPackage.getIdentifier().toString();
+      logger.info("Start adding catalog {} from input stream on mediapackage {}", elementId, mediaPackageId);
+      final URI newUrl = addContentToRepo(mediaPackage, elementId, fileName, in);
+
+      final boolean isJSON;
+      try (InputStream inputStream = workingFileRepository.get(mediaPackageId, elementId)) {
+        try (BufferedReader reader  = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+          // Exception for current BBB integration and Extron SMP351 which is ingesting a JSON array/object as catalog
+          int firstChar = reader.read();
+          isJSON = firstChar == '[' || firstChar == '{';
+        }
+      }
+
+      if (isJSON) {
+        logger.warn("Input catalog seems to be JSON. This is a mistake and will fail in future Opencast versions."
+            + "You will likely want to ingest this as a media package attachment instead.");
+      } else {
+        // Verify XML is not corrupted
+        try {
+          XmlSafeParser.parse(workingFileRepository.get(mediaPackageId, elementId));
+        } catch (SAXException e) {
+          workingFileRepository.delete(mediaPackageId, elementId);
+          throw new IllegalArgumentException("Catalog XML is invalid", e);
+        }
+      }
+
       if (MediaPackageElements.SERIES.equals(flavor)) {
         updateSeries(newUrl);
       }
@@ -974,7 +967,7 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
       if (tags != null && tags.length > 0) {
         MediaPackageElement trackElement = mp.getCatalog(elementId);
         for (String tag : tags) {
-          logger.info("Adding Tag: " + tag + " to Element: " + elementId);
+          logger.info("Adding tag {} to element {}", tag, elementId);
           trackElement.addTag(tag);
         }
       }
@@ -1097,21 +1090,6 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
    * {@inheritDoc}
    *
    * @see org.opencastproject.ingest.api.IngestService#ingest(org.opencastproject.mediapackage.MediaPackage,
-   *      java.lang.String)
-   */
-  @Override
-  public WorkflowInstance ingest(MediaPackage mp, String wd) throws IngestException, NotFoundException {
-    try {
-      return ingest(mp, wd, null, null);
-    } catch (UnauthorizedException e) {
-      throw new IllegalStateException(e);
-    }
-  }
-
-  /**
-   * {@inheritDoc}
-   *
-   * @see org.opencastproject.ingest.api.IngestService#ingest(org.opencastproject.mediapackage.MediaPackage,
    *      java.lang.String, java.util.Map)
    */
   @Override
@@ -1162,7 +1140,7 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
       WorkflowDefinition workflowDef = getWorkflowDefinition(workflowDefinitionId, mp);
 
       // Get the final set of workflow properties
-      properties = mergeWorkflowConfiguration(properties, mp.getIdentifier().compact());
+      properties = mergeWorkflowConfiguration(properties, mp.getIdentifier().toString());
 
       // Remove potential workflow configuration prefixes from the workflow properties
       properties = removePrefixFromProperties(properties);
@@ -1279,17 +1257,17 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
       String mediaPackageId = properties.get(LEGACY_MEDIAPACKAGE_ID_KEY);
       if (StringUtils.isNotBlank(mediaPackageId) && schedulerService != null) {
         logger.debug("Check ingested mediapackage {} for legacy mediapackage identifier {}",
-                mp.getIdentifier().compact(), mediaPackageId);
+                mp.getIdentifier().toString(), mediaPackageId);
         try {
-          schedulerService.getMediaPackage(mp.getIdentifier().compact());
+          schedulerService.getMediaPackage(mp.getIdentifier().toString());
           return mp;
         } catch (NotFoundException e) {
           logger.info("No scheduler mediapackage found with ingested id {}, try legacy mediapackage id {}",
-                  mp.getIdentifier().compact(), mediaPackageId);
+                  mp.getIdentifier().toString(), mediaPackageId);
           try {
             schedulerService.getMediaPackage(mediaPackageId);
             logger.info("Legacy mediapackage id {} exists, change ingested mediapackage id {} to legacy id",
-                    mediaPackageId, mp.getIdentifier().compact());
+                    mediaPackageId, mp.getIdentifier().toString());
             mp.setIdentifier(new IdImpl(mediaPackageId));
             return mp;
           } catch (NotFoundException e1) {
@@ -1299,7 +1277,7 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
             throw new IngestException(e);
           }
         } catch (Exception e) {
-          logger.error("Unable to get event mediapackage from scheduler event {}", mp.getIdentifier().compact(), e);
+          logger.error("Unable to get event mediapackage from scheduler event {}", mp.getIdentifier().toString(), e);
           throw new IngestException(e);
         }
       }
@@ -1351,8 +1329,8 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
     }
 
     try {
-      MediaPackage scheduledMp = schedulerService.getMediaPackage(mp.getIdentifier().compact());
-      logger.info("Found matching scheduled event for id '{}', merging mediapackage...", mp.getIdentifier().compact());
+      MediaPackage scheduledMp = schedulerService.getMediaPackage(mp.getIdentifier().toString());
+      logger.info("Found matching scheduled event for id '{}', merging mediapackage...", mp.getIdentifier().toString());
       mergeMediaPackageElements(mp, scheduledMp);
       mergeMediaPackageMetadata(mp, scheduledMp);
       return mp;
@@ -1501,7 +1479,7 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
           throws NotFoundException, WorkflowDatabaseException, IngestException {
     // If the workflow definition and instance ID are null, use the default, or throw if there is none
     if (isBlank(workflowDefinitionID)) {
-      String mediaPackageId = mediapackage.getIdentifier().compact();
+      String mediaPackageId = mediapackage.getIdentifier().toString();
       if (schedulerService != null) {
         logger.info("Determining workflow template for ingested mediapckage {} from capture event {}", mediapackage,
                 mediaPackageId);
@@ -1575,45 +1553,61 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
    */
   @Override
   public void discardMediaPackage(MediaPackage mp) throws IOException {
-    String mediaPackageId = mp.getIdentifier().compact();
+    String mediaPackageId = mp.getIdentifier().toString();
     for (MediaPackageElement element : mp.getElements()) {
       if (!workingFileRepository.delete(mediaPackageId, element.getIdentifier()))
         logger.warn("Unable to find (and hence, delete), this mediapackage element");
     }
-    logger.info("Sucessful discarded mediapackage {}", mp);
-  }
-
-  /**
-   * Creates a StandAloneTrustedHttpClientImpl
-   *
-   * @param user the username
-   * @param password the password
-   * @return the trusted client
-   */
-  protected TrustedHttpClient createStandaloneHttpClient(String user, String password) {
-    return new StandAloneTrustedHttpClientImpl(this.downloadUser, this.downloadPassword, none(), none(), none());
+    logger.info("Successfully discarded media package {}", mp);
   }
 
   protected URI addContentToRepo(MediaPackage mp, String elementId, URI uri) throws IOException {
     InputStream in = null;
     HttpResponse response = null;
-    TrustedHttpClient httpClientStandAlone = httpClient;
+    CloseableHttpClient externalHttpClient = null;
     try {
       if (uri.toString().startsWith("http")) {
         HttpGet get = new HttpGet(uri);
-
-        if (uri.getHost().matches(this.downloadSource)) {
-          httpClientStandAlone = this.createStandaloneHttpClient(downloadUser,downloadPassword);
+        List<String> clusterUrls = new LinkedList<>();
+        try {
+          // Note that we are not checking ports here.
+          clusterUrls = organizationDirectoryService.getOrganization(uri.toURL()).getServers()
+                          .keySet()
+                          .stream()
+                          .collect(Collectors.toUnmodifiableList());
+        } catch (NotFoundException e) {
+          logger.warn("Unable to determine cluster members, will not be able to authenticate any downloads from them", e);
         }
-        response = httpClientStandAlone.execute(get);
+
+        if (uri.toString().matches(downloadSource)) {
+          //NB: We're creating a new client here with *different* auth than the system auth creds
+          externalHttpClient = getAuthedHttpClient();
+          response = externalHttpClient.execute(get);
+        } else if (clusterUrls.contains(uri.getScheme() + "://" + uri.getHost())) {
+          // Only using the system-level httpclient and digest credentials against our own servers
+          response = httpClient.execute(get);
+        } else {
+          //NB: No auth here at all
+          externalHttpClient = getNoAuthHttpClient();
+          response = externalHttpClient.execute(get);
+        }
+
+        if (null == response) {
+          // If you get here then chances are you're using a mock httpClient which does not have appropriate
+          // mocking to respond to the URL you are feeding it.  Try adding that URL to the mock and see if that works.
+          throw new IOException("Null response object from the http client, refer to code for explanation");
+        }
 
         int httpStatusCode = response.getStatusLine().getStatusCode();
         if (httpStatusCode != 200) {
           throw new IOException(uri + " returns http " + httpStatusCode);
         }
         in = response.getEntity().getContent();
-      } else {
+        //If it does not start with file, or we're in test mode (ie, to allow arbitrary file:// access)
+      } else if (!uri.toString().startsWith("file") || testMode) {
         in = uri.toURL().openStream();
+      } else {
+        throw new IOException("Refusing to fetch files from the local filesystem");
       }
       String fileName = FilenameUtils.getName(uri.getPath());
       if (isBlank(FilenameUtils.getExtension(fileName)))
@@ -1623,8 +1617,13 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
         throw new IOException("No filename extension found: " + fileName);
       return addContentToRepo(mp, elementId, fileName, in);
     } finally {
-      IOUtils.closeQuietly(in);
-      httpClientStandAlone.close(response);
+      if (in != null) {
+        in.close();
+      }
+      if (externalHttpClient != null) {
+        externalHttpClient.close();
+      }
+      httpClient.close(response);
     }
   }
 
@@ -1648,7 +1647,7 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
         ingestStatistics.add(totalNumBytesRead - oldTotalNumBytesRead);
       }
     });
-    return workingFileRepository.put(mp.getIdentifier().compact(), elementId, filename, progressInputStream);
+    return workingFileRepository.put(mp.getIdentifier().toString(), elementId, filename, progressInputStream);
   }
 
   private MediaPackage addContentToMediaPackage(MediaPackage mp, String elementId, URI uri,
@@ -1662,18 +1661,22 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
   // ---------------------------------------------
   // --------- bind and unbind bundles ---------
   // ---------------------------------------------
+  @Reference
   public void setWorkflowService(WorkflowService workflowService) {
     this.workflowService = workflowService;
   }
 
+  @Reference
   public void setWorkingFileRepository(WorkingFileRepository workingFileRepository) {
     this.workingFileRepository = workingFileRepository;
   }
 
+  @Reference
   public void setSeriesService(SeriesService seriesService) {
     this.seriesService = seriesService;
   }
 
+  @Reference
   public void setDublinCoreService(DublinCoreCatalogService dublinCoreService) {
     this.dublinCoreService = dublinCoreService;
   }
@@ -1704,6 +1707,7 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
    * @param securityService
    *          the securityService to set
    */
+  @Reference
   public void setSecurityService(SecurityService securityService) {
     this.securityService = securityService;
   }
@@ -1714,6 +1718,7 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
    * @param userDirectoryService
    *          the userDirectoryService to set
    */
+  @Reference
   public void setUserDirectoryService(UserDirectoryService userDirectoryService) {
     this.userDirectoryService = userDirectoryService;
   }
@@ -1724,8 +1729,17 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
    * @param schedulerService
    *          the scheduler service to set
    */
+  @Reference(
+    policy = ReferencePolicy.DYNAMIC,
+    cardinality = ReferenceCardinality.OPTIONAL,
+    unbind = "unsetSchedulerService"
+  )
   public void setSchedulerService(SchedulerService schedulerService) {
     this.schedulerService = schedulerService;
+  }
+
+  public void unsetSchedulerService(SchedulerService schedulerService) {
+    this.schedulerService = null;
   }
 
   /**
@@ -1734,6 +1748,7 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
    * @param organizationDirectory
    *          the organization directory
    */
+  @Reference
   public void setOrganizationDirectoryService(OrganizationDirectoryService organizationDirectory) {
     organizationDirectoryService = organizationDirectory;
   }
@@ -1766,6 +1781,20 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
   @Override
   protected OrganizationDirectoryService getOrganizationDirectoryService() {
     return organizationDirectoryService;
+  }
+
+  //Used in testing
+  protected CloseableHttpClient getNoAuthHttpClient() {
+    return HttpClientBuilder.create().build();
+  }
+
+  protected CloseableHttpClient getAuthedHttpClient() {
+    HttpClientBuilder cb = HttpClientBuilder.create();
+    CredentialsProvider provider = new BasicCredentialsProvider();
+    provider.setCredentials(
+      new AuthScope(AuthScope.ANY_HOST, AuthScope.ANY_PORT, AuthScope.ANY_REALM, AuthSchemes.DIGEST),
+      new UsernamePasswordCredentials(downloadUser, downloadPassword));
+    return cb.build();
   }
 
   private MediaPackage createSmil(MediaPackage mediaPackage) throws IOException, IngestException {
@@ -1825,7 +1854,7 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
     try {
       in = XmlUtil.serializeDocument(smilDocument);
       String elementId = UUID.randomUUID().toString();
-      URI uri = workingFileRepository.put(mediaPackage.getIdentifier().compact(), elementId, PARTIAL_SMIL_NAME, in);
+      URI uri = workingFileRepository.put(mediaPackage.getIdentifier().toString(), elementId, PARTIAL_SMIL_NAME, in);
       MediaPackageElement mpe = mediaPackage.add(uri, MediaPackageElement.Type.Catalog, MediaPackageElements.SMIL);
       mpe.setIdentifier(elementId);
       // Reset the checksum since it changed
@@ -1850,7 +1879,7 @@ public class IngestServiceImpl extends AbstractJobProducer implements IngestServ
               public org.w3c.dom.Document apply(MediaPackageElement mpe) {
                 InputStream in = null;
                 try {
-                  in = workingFileRepository.get(mpe.getMediaPackage().getIdentifier().compact(), mpe.getIdentifier());
+                  in = workingFileRepository.get(mpe.getMediaPackage().getIdentifier().toString(), mpe.getIdentifier());
                   return SmilUtil.loadSmilDocument(in, mpe);
                 } catch (Exception e) {
                   logger.warn("Unable to load smil document from catalog '{}'", mpe, e);

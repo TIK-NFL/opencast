@@ -33,6 +33,7 @@ import org.opencastproject.mediapackage.MediaPackageException;
 import org.opencastproject.mediapackage.Track;
 import org.opencastproject.util.NotFoundException;
 import org.opencastproject.workflow.api.AbstractWorkflowOperationHandler;
+import org.opencastproject.workflow.api.ConfiguredTagsAndFlavors;
 import org.opencastproject.workflow.api.WorkflowInstance;
 import org.opencastproject.workflow.api.WorkflowOperationException;
 import org.opencastproject.workflow.api.WorkflowOperationResult;
@@ -59,13 +60,13 @@ public class SelectStreamsWorkflowOperationHandler extends AbstractWorkflowOpera
   private static final Logger logger = LoggerFactory.getLogger(SelectStreamsWorkflowOperationHandler.class);
 
   /** Name of the 'encode to video only work copy' encoding profile */
-  private static final String PREPARE_VIDEO_ONLY_PROFILE = "video-only.work";
+  private static final String PREPARE_VIDEO_ONLY_PROFILE = "video-only.copy";
 
   /** Name of the 'encode to video only work copy' encoding profile */
-  private static final String PREPARE_AUDIO_ONLY_PROFILE = "audio-only.work";
+  private static final String PREPARE_AUDIO_ONLY_PROFILE = "audio-only.copy";
 
   /** Name of the muxing encoding profile */
-  private static final String MUX_AV_PROFILE = "mux-av.work";
+  private static final String MUX_AV_PROFILE = "mux-av.copy";
 
   /** The composer service */
   private ComposerService composerService = null;
@@ -222,13 +223,12 @@ public class SelectStreamsWorkflowOperationHandler extends AbstractWorkflowOpera
           throws WorkflowOperationException, EncoderException, MediaPackageException, NotFoundException, IOException {
     final MediaPackage mediaPackage = workflowInstance.getMediaPackage();
 
-    final MediaPackageElementFlavor sourceFlavor = getConfiguration(workflowInstance, "source-flavor")
-            .map(MediaPackageElementFlavor::parseFlavor)
-            .orElseThrow(() -> new IllegalStateException("Source flavor must be specified"));
+    ConfiguredTagsAndFlavors tagsAndFlavors = getTagsAndFlavors(workflowInstance,
+        Configuration.none, Configuration.one, Configuration.many, Configuration.one);
 
-    final MediaPackageElementFlavor targetTrackFlavor = MediaPackageElementFlavor.parseFlavor(StringUtils.trimToNull(
-            getConfiguration(workflowInstance, "target-flavor")
-                    .orElseThrow(() -> new IllegalStateException("Target flavor not specified"))));
+    final MediaPackageElementFlavor sourceFlavor = tagsAndFlavors.getSingleSrcFlavor();
+    final MediaPackageElementFlavor targetTrackFlavor = tagsAndFlavors.getSingleTargetFlavor();
+    final List<String> targetTrackTags = tagsAndFlavors.getTargetTags();
 
     final Track[] tracks = mediaPackage.getTracks(sourceFlavor);
 
@@ -342,10 +342,8 @@ public class SelectStreamsWorkflowOperationHandler extends AbstractWorkflowOpera
     });
 
     // Update Tags here
-    getConfiguration(workflowInstance, "target-tags").ifPresent(tags -> {
-      final WorkflowOperationTagUtil.TagDiff tagDiff = WorkflowOperationTagUtil.createTagDiff(tags);
-      result.forEachTrack(t -> WorkflowOperationTagUtil.applyTagDiff(tagDiff, t));
-    });
+    final WorkflowOperationTagUtil.TagDiff tagDiff = WorkflowOperationTagUtil.createTagDiff(targetTrackTags);
+    result.forEachTrack(t -> WorkflowOperationTagUtil.applyTagDiff(tagDiff, t));
 
     return createResult(mediaPackage, WorkflowOperationResult.Action.CONTINUE, result.queueTime);
   }

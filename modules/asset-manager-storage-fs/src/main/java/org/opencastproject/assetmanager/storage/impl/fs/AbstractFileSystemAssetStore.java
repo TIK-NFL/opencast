@@ -32,11 +32,11 @@ import static org.opencastproject.util.PathSupport.path;
 import static org.opencastproject.util.data.functions.Strings.trimToNone;
 
 import org.opencastproject.assetmanager.api.Version;
-import org.opencastproject.assetmanager.impl.storage.AssetStore;
-import org.opencastproject.assetmanager.impl.storage.AssetStoreException;
-import org.opencastproject.assetmanager.impl.storage.DeletionSelector;
-import org.opencastproject.assetmanager.impl.storage.Source;
-import org.opencastproject.assetmanager.impl.storage.StoragePath;
+import org.opencastproject.assetmanager.api.storage.AssetStore;
+import org.opencastproject.assetmanager.api.storage.AssetStoreException;
+import org.opencastproject.assetmanager.api.storage.DeletionSelector;
+import org.opencastproject.assetmanager.api.storage.Source;
+import org.opencastproject.assetmanager.api.storage.StoragePath;
 import org.opencastproject.util.FileSupport;
 import org.opencastproject.util.NotFoundException;
 import org.opencastproject.util.data.Option;
@@ -164,8 +164,9 @@ public abstract class AbstractFileSystemAssetStore implements AssetStore {
    */
   private File getDeletionSelectorDir(DeletionSelector sel) {
     final String basePath = path(getRootDirectory(), sel.getOrganizationId(), sel.getMediaPackageId());
-    for (Version v : sel.getVersion())
+    for (Version v : sel.getVersion()) {
       return file(basePath, v.toString());
+    }
     return file(basePath);
   }
 
@@ -269,6 +270,8 @@ public abstract class AbstractFileSystemAssetStore implements AssetStore {
   }
 
   @Override
-  public String getStoreType() { return storeType; }
+  public String getStoreType() {
+    return storeType;
+  }
 
 }

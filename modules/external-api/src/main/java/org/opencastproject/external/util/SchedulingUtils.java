@@ -31,10 +31,10 @@ import static org.apache.commons.lang3.StringUtils.isNotBlank;
 import org.opencastproject.capture.CaptureParameters;
 import org.opencastproject.capture.admin.api.Agent;
 import org.opencastproject.capture.admin.api.CaptureAgentStateService;
+import org.opencastproject.elasticsearch.api.SearchIndexException;
+import org.opencastproject.elasticsearch.index.ElasticsearchIndex;
+import org.opencastproject.elasticsearch.index.objects.event.Event;
 import org.opencastproject.index.service.api.IndexService;
-import org.opencastproject.index.service.impl.index.AbstractSearchIndex;
-import org.opencastproject.index.service.impl.index.event.Event;
-import org.opencastproject.matterhorn.search.SearchIndexException;
 import org.opencastproject.mediapackage.MediaPackage;
 import org.opencastproject.scheduler.api.SchedulerException;
 import org.opencastproject.scheduler.api.SchedulerService;
@@ -346,8 +346,8 @@ public final class SchedulingUtils {
    *          The conflicting {@link MediaPackage}s.
    * @param indexService
    *          The {@link IndexService} for getting the corresponding events for the conflicting {@link MediaPackage}s.
-   * @param externalIndex
-   *          The ExternalIndex to use for getting the corresponding events for the conflicting MediaPackages.
+   * @param elasticsearchIndex
+   *          The index to use for getting the corresponding events for the conflicting MediaPackages.
    *
    * @return A List of conflicting events, represented as JSON objects.
    *
@@ -358,11 +358,11 @@ public final class SchedulingUtils {
       Optional<String> checkedEventId,
       List<MediaPackage> mediaPackages,
       IndexService indexService,
-      AbstractSearchIndex externalIndex
+      ElasticsearchIndex elasticsearchIndex
   ) throws SearchIndexException {
     final List<JValue> result = new ArrayList<>();
     for (MediaPackage mediaPackage : mediaPackages) {
-      final Opt<Event> eventOpt = indexService.getEvent(mediaPackage.getIdentifier().compact(), externalIndex);
+      final Opt<Event> eventOpt = indexService.getEvent(mediaPackage.getIdentifier().toString(), elasticsearchIndex);
       if (eventOpt.isSome()) {
         final Event event = eventOpt.get();
         if (checkedEventId.isPresent() && checkedEventId.equals(event.getIdentifier())) {
@@ -372,7 +372,7 @@ public final class SchedulingUtils {
             f("title", v(event.getTitle()))));
       } else {
         logger.warn("Index out of sync! Conflicting event catalog {} not found on event index!",
-            mediaPackage.getIdentifier().compact());
+            mediaPackage.getIdentifier().toString());
       }
     }
     return result;

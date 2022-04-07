@@ -14,8 +14,8 @@ Perform the following steps to get the External API running:
 Authentication
 --------------
 
-The External API currenlty only supports basic authentication. To enable basic authentication, uncomment the following
-blocks in `/etc/security/mh_default.org`:
+The External API currently only supports basic authentication. To enable basic authentication, uncomment the following
+blocks in `/etc/security/mh_default_org.xml`:
 
     <!-- Basic authentication
     <sec:custom-filter after="BASIC_AUTH_FILTER" ref="basicAuthenticationFilter" />
@@ -114,12 +114,6 @@ directly in the Opencast administrative user interface.
 |ROLE                         |METHOD | URL                           |
 |-----------------------------|-------|-------------------------------|
 |ROLE_API_CAPTURE_AGENTS_VIEW |GET    |/api/agents</br>/api/agents/\* |
-
-**Administrative API**
-
-|ROLE       |METHOD | URL               |
-|-----------|-------|-------------------|
-|ROLE_ADMIN |POST   |/api/recreateIndex |
 
 **Workflow API**
 

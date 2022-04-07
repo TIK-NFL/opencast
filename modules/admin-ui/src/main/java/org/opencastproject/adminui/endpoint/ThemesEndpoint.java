@@ -38,18 +38,18 @@ import static org.opencastproject.index.service.util.RestUtils.okJson;
 import static org.opencastproject.index.service.util.RestUtils.okJsonList;
 import static org.opencastproject.util.doc.rest.RestParameter.Type.STRING;
 
-import org.opencastproject.adminui.index.AdminUISearchIndex;
 import org.opencastproject.adminui.util.QueryPreprocessor;
-import org.opencastproject.index.service.impl.index.series.Series;
-import org.opencastproject.index.service.impl.index.series.SeriesSearchQuery;
-import org.opencastproject.index.service.impl.index.theme.ThemeIndexSchema;
-import org.opencastproject.index.service.impl.index.theme.ThemeSearchQuery;
+import org.opencastproject.elasticsearch.api.SearchIndexException;
+import org.opencastproject.elasticsearch.api.SearchResult;
+import org.opencastproject.elasticsearch.api.SearchResultItem;
+import org.opencastproject.elasticsearch.index.ElasticsearchIndex;
+import org.opencastproject.elasticsearch.index.objects.series.Series;
+import org.opencastproject.elasticsearch.index.objects.series.SeriesSearchQuery;
+import org.opencastproject.elasticsearch.index.objects.theme.IndexTheme;
+import org.opencastproject.elasticsearch.index.objects.theme.ThemeIndexSchema;
+import org.opencastproject.elasticsearch.index.objects.theme.ThemeSearchQuery;
 import org.opencastproject.index.service.resources.list.query.ThemesListQuery;
 import org.opencastproject.index.service.util.RestUtils;
-import org.opencastproject.matterhorn.search.SearchIndexException;
-import org.opencastproject.matterhorn.search.SearchResult;
-import org.opencastproject.matterhorn.search.SearchResultItem;
-import org.opencastproject.matterhorn.search.SortCriterion;
 import org.opencastproject.security.api.SecurityService;
 import org.opencastproject.security.api.UnauthorizedException;
 import org.opencastproject.security.api.User;
@@ -71,6 +71,7 @@ import org.opencastproject.util.doc.rest.RestParameter.Type;
 import org.opencastproject.util.doc.rest.RestQuery;
 import org.opencastproject.util.doc.rest.RestResponse;
 import org.opencastproject.util.doc.rest.RestService;
+import org.opencastproject.util.requests.SortCriterion;
 
 import com.entwinemedia.fn.data.Opt;
 import com.entwinemedia.fn.data.json.Field;
@@ -79,8 +80,10 @@ import com.entwinemedia.fn.data.json.Jsons;
 
 import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.osgi.framework.BundleContext;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -114,6 +117,15 @@ import javax.ws.rs.core.Response.Status;
               + "<em>This service is for exclusive use by the module admin-ui. Its API might change "
               + "anytime without prior notice. Any dependencies other than the admin UI will be strictly ignored. "
               + "DO NOT use this for integration of third-party applications.<em>"})
+@Component(
+        immediate = true,
+        service = ThemesEndpoint.class,
+        property = {
+                "service.description=Admin UI - Themes Endpoint",
+                "opencast.service.type=org.opencastproject.adminui.ThemesEndpoint",
+                "opencast.service.path=/admin-ng/themes",
+        }
+)
 public class ThemesEndpoint {
 
   /** The logging facility */
@@ -126,7 +138,7 @@ public class ThemesEndpoint {
   private SecurityService securityService;
 
   /** The admin UI search index */
-  private AdminUISearchIndex searchIndex;
+  private ElasticsearchIndex searchIndex;
 
   /** The series service */
   private SeriesService seriesService;
@@ -138,35 +150,42 @@ public class ThemesEndpoint {
   private StaticFileRestService staticFileRestService;
 
   /** OSGi callback for the themes service database. */
+  @Reference
   public void setThemesServiceDatabase(ThemesServiceDatabase themesServiceDatabase) {
     this.themesServiceDatabase = themesServiceDatabase;
   }
 
   /** OSGi callback for the security service. */
+  @Reference
   public void setSecurityService(SecurityService securityService) {
     this.securityService = securityService;
   }
 
   /** OSGi DI. */
-  public void setIndex(AdminUISearchIndex index) {
+  @Reference
+  public void setIndex(ElasticsearchIndex index) {
     this.searchIndex = index;
   }
 
   /** OSGi DI. */
+  @Reference
   public void setSeriesService(SeriesService seriesService) {
     this.seriesService = seriesService;
   }
 
   /** OSGi DI. */
+  @Reference
   public void setStaticFileService(StaticFileService staticFileService) {
     this.staticFileService = staticFileService;
   }
 
   /** OSGi DI. */
+  @Reference
   public void setStaticFileRestService(StaticFileRestService staticFileRestService) {
     this.staticFileRestService = staticFileRestService;
   }
 
+  @Activate
   public void activate(BundleContext bundleContext) {
     logger.info("Activate themes endpoint");
   }
@@ -178,7 +197,7 @@ public class ThemesEndpoint {
           @RestParameter(name = "filter", isRequired = false, description = "The filter used for the query. They should be formated like that: 'filter1:value1,filter2:value2'", type = STRING),
           @RestParameter(defaultValue = "0", description = "The maximum number of items to return per page.", isRequired = false, name = "limit", type = RestParameter.Type.INTEGER),
           @RestParameter(defaultValue = "0", description = "The page number.", isRequired = false, name = "offset", type = RestParameter.Type.INTEGER),
-          @RestParameter(name = "sort", isRequired = false, description = "The sort order. May include any of the following: NAME, CREATOR.  Add '_DESC' to reverse the sort order (e.g. CREATOR_DESC).", type = STRING) }, reponses = { @RestResponse(description = "A JSON representation of the themes", responseCode = HttpServletResponse.SC_OK) }, returnDescription = "")
+          @RestParameter(name = "sort", isRequired = false, description = "The sort order. May include any of the following: NAME, CREATOR.  Add '_DESC' to reverse the sort order (e.g. CREATOR_DESC).", type = STRING) }, responses = { @RestResponse(description = "A JSON representation of the themes", responseCode = HttpServletResponse.SC_OK) }, returnDescription = "")
   public Response getThemes(@QueryParam("filter") String filter, @QueryParam("limit") int limit,
           @QueryParam("offset") int offset, @QueryParam("sort") String sort) {
     Option<Integer> optLimit = Option.option(limit);
@@ -233,7 +252,7 @@ public class ThemesEndpoint {
 
     logger.trace("Using Query: " + query.toString());
 
-    SearchResult<org.opencastproject.index.service.impl.index.theme.Theme> results = null;
+    SearchResult<IndexTheme> results = null;
     try {
       results = searchIndex.getByQuery(query);
     } catch (SearchIndexException e) {
@@ -249,8 +268,8 @@ public class ThemesEndpoint {
       return okJsonList(themesJSON, nul(offset).getOr(0), nul(limit).getOr(0), 0);
     }
 
-    for (SearchResultItem<org.opencastproject.index.service.impl.index.theme.Theme> item : results.getItems()) {
-      org.opencastproject.index.service.impl.index.theme.Theme theme = item.getSource();
+    for (SearchResultItem<IndexTheme> item : results.getItems()) {
+      IndexTheme theme = item.getSource();
       themesJSON.add(themeToJSON(theme, false));
     }
 
@@ -260,11 +279,11 @@ public class ThemesEndpoint {
   @GET
   @Path("{themeId}.json")
   @Produces(MediaType.APPLICATION_JSON)
-  @RestQuery(name = "getTheme", description = "Returns the theme by the given id as JSON", returnDescription = "The theme as JSON", pathParameters = { @RestParameter(name = "themeId", description = "The theme id", isRequired = true, type = RestParameter.Type.INTEGER) }, reponses = {
+  @RestQuery(name = "getTheme", description = "Returns the theme by the given id as JSON", returnDescription = "The theme as JSON", pathParameters = { @RestParameter(name = "themeId", description = "The theme id", isRequired = true, type = RestParameter.Type.INTEGER) }, responses = {
           @RestResponse(description = "Returns the theme as JSON", responseCode = HttpServletResponse.SC_OK),
           @RestResponse(description = "No theme with this identifier was found.", responseCode = HttpServletResponse.SC_NOT_FOUND) })
   public Response getThemeResponse(@PathParam("themeId") long id) throws Exception {
-    Opt<org.opencastproject.index.service.impl.index.theme.Theme> theme = getTheme(id);
+    Opt<IndexTheme> theme = getTheme(id);
     if (theme.isNone())
       return notFound("Cannot find a theme with id '%s'", id);
 
@@ -274,11 +293,11 @@ public class ThemesEndpoint {
   @GET
   @Path("{themeId}/usage.json")
   @Produces(MediaType.APPLICATION_JSON)
-  @RestQuery(name = "getThemeUsage", description = "Returns the theme usage by the given id as JSON", returnDescription = "The theme usage as JSON", pathParameters = { @RestParameter(name = "themeId", description = "The theme id", isRequired = true, type = RestParameter.Type.INTEGER) }, reponses = {
+  @RestQuery(name = "getThemeUsage", description = "Returns the theme usage by the given id as JSON", returnDescription = "The theme usage as JSON", pathParameters = { @RestParameter(name = "themeId", description = "The theme id", isRequired = true, type = RestParameter.Type.INTEGER) }, responses = {
           @RestResponse(description = "Returns the theme usage as JSON", responseCode = HttpServletResponse.SC_OK),
           @RestResponse(description = "Theme with the given id does not exist", responseCode = HttpServletResponse.SC_NOT_FOUND) })
   public Response getThemeUsage(@PathParam("themeId") long themeId) throws Exception {
-    Opt<org.opencastproject.index.service.impl.index.theme.Theme> theme = getTheme(themeId);
+    Opt<IndexTheme> theme = getTheme(themeId);
     if (theme.isNone())
       return notFound("Cannot find a theme with id {}", themeId);
 
@@ -288,8 +307,8 @@ public class ThemesEndpoint {
     try {
       results = searchIndex.getByQuery(query);
     } catch (SearchIndexException e) {
-      logger.error("The admin UI Search Index was not able to get the series with theme '{}': {}", themeId,
-              ExceptionUtils.getStackTrace(e));
+      logger.error("The admin UI Search Index was not able to get the series with theme '{}':", themeId,
+              e);
       return RestUtil.R.serverError();
     }
     List<JValue> seriesValues = new ArrayList<JValue>();
@@ -318,7 +337,7 @@ public class ThemesEndpoint {
           @RestParameter(name = "licenseSlideBackground", description = "The theme license slide background file", isRequired = false, type = Type.STRING),
           @RestParameter(name = "titleSlideMetadata", description = "The theme title slide metadata", isRequired = false, type = Type.STRING),
           @RestParameter(name = "licenseSlideDescription", description = "The theme license slide description", isRequired = false, type = Type.STRING),
-          @RestParameter(name = "watermarkPosition", description = "The theme watermark position", isRequired = false, type = Type.STRING), }, reponses = {
+          @RestParameter(name = "watermarkPosition", description = "The theme watermark position", isRequired = false, type = Type.STRING), }, responses = {
           @RestResponse(responseCode = SC_OK, description = "Theme created"),
           @RestResponse(responseCode = SC_BAD_REQUEST, description = "The theme references a non-existing file") })
   public Response createTheme(@FormParam("default") boolean isDefault, @FormParam("name") String name,
@@ -380,7 +399,7 @@ public class ThemesEndpoint {
           @RestParameter(name = "licenseSlideBackground", description = "The theme license slide background file", isRequired = false, type = Type.STRING),
           @RestParameter(name = "titleSlideMetadata", description = "The theme title slide metadata", isRequired = false, type = Type.STRING),
           @RestParameter(name = "licenseSlideDescription", description = "The theme license slide description", isRequired = false, type = Type.STRING),
-          @RestParameter(name = "watermarkPosition", description = "The theme watermark position", isRequired = false, type = Type.STRING), }, reponses = {
+          @RestParameter(name = "watermarkPosition", description = "The theme watermark position", isRequired = false, type = Type.STRING), }, responses = {
           @RestResponse(responseCode = SC_OK, description = "Theme updated"),
           @RestResponse(responseCode = SC_NOT_FOUND, description = "If the theme has not been found."), })
   public Response updateTheme(@PathParam("themeId") long themeId, @FormParam("default") Boolean isDefault,
@@ -460,7 +479,7 @@ public class ThemesEndpoint {
 
   @DELETE
   @Path("{themeId}")
-  @RestQuery(name = "deleteTheme", description = "Deletes a theme", returnDescription = "The method doesn't return any content", pathParameters = { @RestParameter(name = "themeId", isRequired = true, description = "The theme identifier", type = RestParameter.Type.INTEGER) }, reponses = {
+  @RestQuery(name = "deleteTheme", description = "Deletes a theme", returnDescription = "The method doesn't return any content", pathParameters = { @RestParameter(name = "themeId", isRequired = true, description = "The theme identifier", type = RestParameter.Type.INTEGER) }, responses = {
           @RestResponse(responseCode = SC_NOT_FOUND, description = "If the theme has not been found."),
           @RestResponse(responseCode = SC_NO_CONTENT, description = "The method does not return any content"),
           @RestResponse(responseCode = SC_UNAUTHORIZED, description = "If the current user is not authorized to perform this action") })
@@ -482,8 +501,8 @@ public class ThemesEndpoint {
       logger.warn("Unable to find a theme with id " + themeId);
       throw e;
     } catch (ThemesServiceDatabaseException e) {
-      logger.error("Error getting theme {} during delete operation because: {}", themeId,
-              ExceptionUtils.getStackTrace(e));
+      logger.error("Error getting theme {} during delete operation because:", themeId,
+              e);
       return RestUtil.R.serverError();
     }
   }
@@ -501,8 +520,7 @@ public class ThemesEndpoint {
     try {
       results = searchIndex.getByQuery(query);
     } catch (SearchIndexException e) {
-      logger.error("The admin UI Search Index was not able to get the series with theme '{}': {}", themeId,
-              ExceptionUtils.getStackTrace(e));
+      logger.error("The admin UI Search Index was not able to get the series with theme '{}':", themeId, e);
       throw new WebApplicationException(e, Status.INTERNAL_SERVER_ERROR);
     }
     for (SearchResultItem<Series> item : results.getItems()) {
@@ -526,13 +544,13 @@ public class ThemesEndpoint {
    * @return a theme or none if not found, wrapped in an option
    * @throws SearchIndexException
    */
-  private Opt<org.opencastproject.index.service.impl.index.theme.Theme> getTheme(long id) throws SearchIndexException {
-    SearchResult<org.opencastproject.index.service.impl.index.theme.Theme> result = searchIndex
+  private Opt<IndexTheme> getTheme(long id) throws SearchIndexException {
+    SearchResult<IndexTheme> result = searchIndex
             .getByQuery(new ThemeSearchQuery(securityService.getOrganization().getId(), securityService.getUser())
                     .withIdentifier(id));
     if (result.getPageSize() == 0) {
       logger.debug("Didn't find theme with id {}", id);
-      return Opt.<org.opencastproject.index.service.impl.index.theme.Theme> none();
+      return Opt.<IndexTheme> none();
     }
     return Opt.some(result.getItems()[0].getSource());
   }
@@ -546,7 +564,7 @@ public class ThemesEndpoint {
    *          whether the returning representation should contain edit information
    * @return the JSON representation of this theme.
    */
-  private JValue themeToJSON(org.opencastproject.index.service.impl.index.theme.Theme theme, boolean editResponse) {
+  private JValue themeToJSON(IndexTheme theme, boolean editResponse) {
     List<Field> fields = new ArrayList<Field>();
     fields.add(f("id", v(theme.getIdentifier())));
     fields.add(f("creationDate", v(DateTimeSupport.toUTC(theme.getCreationDate().getTime()))));

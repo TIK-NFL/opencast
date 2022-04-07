@@ -24,6 +24,7 @@ package org.opencastproject.mediapackage;
 import static org.opencastproject.util.data.functions.Misc.chuck;
 
 import org.opencastproject.util.DateTimeSupport;
+import org.opencastproject.util.XmlSafeParser;
 
 import org.apache.commons.lang3.StringUtils;
 import org.codehaus.jettison.mapped.Configuration;
@@ -32,7 +33,6 @@ import org.codehaus.jettison.mapped.MappedXMLStreamWriter;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
-import java.io.OutputStream;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -139,7 +139,7 @@ public final class MediaPackageParser {
 
   /** Create a new DOM document. */
   private static Document newDocument() {
-    final DocumentBuilderFactory docBuilderFactory = DocumentBuilderFactory.newInstance();
+    final DocumentBuilderFactory docBuilderFactory = XmlSafeParser.newDocumentBuilderFactory();
     docBuilderFactory.setNamespaceAware(true);
     try {
       return docBuilderFactory.newDocumentBuilder().newDocument();
@@ -165,7 +165,7 @@ public final class MediaPackageParser {
    */
   public static Document getAsXml(MediaPackage mediaPackage, MediaPackageSerializer serializer)
           throws MediaPackageException {
-    DocumentBuilderFactory docBuilderFactory = DocumentBuilderFactory.newInstance();
+    DocumentBuilderFactory docBuilderFactory = XmlSafeParser.newDocumentBuilderFactory();
     docBuilderFactory.setNamespaceAware(true);
 
     DocumentBuilder docBuilder = null;
@@ -266,28 +266,6 @@ public final class MediaPackageParser {
   public static MediaPackage getFromXml(String xml) throws MediaPackageException {
     MediaPackageBuilder builder = MediaPackageBuilderFactory.newInstance().newMediaPackageBuilder();
     return builder.loadFromXml(xml);
-  }
-
-  /**
-   * Writes an xml representation of this MediaPackage to a stream.
-   *
-   * @param mediaPackage
-   *          the mediaPackage
-   * @param out
-   *          The output stream
-   * @param format
-   *          Whether to format the output for readability, or not (false gives better performance)
-   * @throws MediaPackageException
-   *           if serializing or reading from a serialized media package fails
-   */
-  public static void getAsXml(MediaPackage mediaPackage, OutputStream out, boolean format) throws MediaPackageException {
-    try {
-      Marshaller marshaller = MediaPackageImpl.context.createMarshaller();
-      marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, format);
-      marshaller.marshal(mediaPackage, out);
-    } catch (JAXBException e) {
-      throw new MediaPackageException(e.getLinkedException() != null ? e.getLinkedException() : e);
-    }
   }
 
   /**

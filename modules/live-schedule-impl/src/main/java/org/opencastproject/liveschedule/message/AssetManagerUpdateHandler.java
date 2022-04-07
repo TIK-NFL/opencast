@@ -54,22 +54,25 @@ public class AssetManagerUpdateHandler extends UpdateHandler {
           if (item instanceof TakeSnapshot) { // Check class just in case
             TakeSnapshot snapshotItem = (TakeSnapshot) item;
             // If no episopde dc, there's nothing to do.
-            if (snapshotItem.getEpisodeDublincore().isNone())
+            if (snapshotItem.getEpisodeDublincore().isNone()) {
               break;
+            }
             // Does media package have a live publication channel? This is to ignore non-live
             // and past events.
             // Note: we never create live events when getting asset manager
             // notifications, only when getting scheduler notifications
             for (Publication pub : snapshotItem.getMediapackage().getPublications()) {
-              if (LiveScheduleService.CHANNEL_ID.equals(pub.getChannel()))
+              if (LiveScheduleService.CHANNEL_ID.equals(pub.getChannel())) {
                 liveScheduleService.createOrUpdateLiveEvent(mpId, snapshotItem.getEpisodeDublincore().get());
+              }
             }
           }
           break;
         case Delete:
-          if (item instanceof DeleteEpisode)
+          if (item instanceof DeleteEpisode) {
             // Episode is being deleted
             liveScheduleService.deleteLiveEvent(mpId);
+          }
 
           // No action needed when a snapshot is deleted
           break;
@@ -77,7 +80,7 @@ public class AssetManagerUpdateHandler extends UpdateHandler {
           throw new IllegalArgumentException("Unhandled type of AssetManagerItem");
       }
     } catch (Exception e) {
-      logger.warn(String.format("Exception occurred for mp %s, event type %s", mpId, item.getType()), e);
+      logger.warn("Exception occurred for mp {}, event type {}", mpId, item.getType(), e);
     } finally {
       logger.debug("Asset Manager message handler END for mp {} event type {} in thread {}", mpId, item.getType(),
               Thread.currentThread().getId());

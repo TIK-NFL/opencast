@@ -138,10 +138,12 @@ public class UserAndRoleDirectoryServiceImplTest {
     EasyMock.expect(otherOrgRoleProvider.getRolesForUser((String) EasyMock.anyObject())).andReturn(rolesForUser2)
             .anyTimes();
 
-    EasyMock.expect(otherOrgRoleProvider.findRoles("%", Role.Target.ALL, 0, 0)).andReturn(roles2.iterator())
-            .anyTimes();
-    EasyMock.expect(otherOrgRoleProvider.findRoles("%2012%", Role.Target.ALL, 0, 0)).andReturn(new ArrayList<Role>().iterator())
-            .anyTimes();
+    EasyMock.expect(otherOrgRoleProvider.findRoles("%", Role.Target.ALL, 0, 0))
+        .andReturn(roles2.iterator())
+        .anyTimes();
+    EasyMock.expect(otherOrgRoleProvider.findRoles("%2012%", Role.Target.ALL, 0, 0))
+        .andReturn(new ArrayList<Role>().iterator())
+        .anyTimes();
 
     SecurityService securityService = EasyMock.createNiceMock(SecurityService.class);
     EasyMock.expect(securityService.getOrganization()).andReturn(org).anyTimes();
@@ -176,7 +178,7 @@ public class UserAndRoleDirectoryServiceImplTest {
   @Test
   @SuppressWarnings("unchecked")
   public void testGetRoles() {
-    List<Role> roles = IteratorUtils.toList(directory.findRoles("%", Role.Target.ALL, 0, 0));
+    List<Role> roles = directory.findRoles("%", Role.Target.ALL, 0, 0);
     Assert.assertEquals(4, roles.size());
   }
 
@@ -204,7 +206,7 @@ public class UserAndRoleDirectoryServiceImplTest {
   @Test
   @SuppressWarnings("unchecked")
   public void testFindRoles() {
-    List<Role> roles = IteratorUtils.toList(directory.findRoles("%2012%", Role.Target.ALL, 0, 0));
+    List<Role> roles = directory.findRoles("%2012%", Role.Target.ALL, 0, 0);
     Assert.assertEquals(2, roles.size());
     Assert.assertTrue("ROLE_MATH_2012".equals(roles.get(0).getName())
             || "ROLE_MATH_2012".equals(roles.get(1).getName()));
@@ -212,7 +214,7 @@ public class UserAndRoleDirectoryServiceImplTest {
             || "ROLE_ASTRO_2012".equals(roles.get(1).getName()));
 
     // Test limit and offset
-    roles = IteratorUtils.toList(directory.findRoles("%2012%", Role.Target.ALL, 1, 1));
+    roles = directory.findRoles("%2012%", Role.Target.ALL, 1, 1);
     Assert.assertEquals(1, roles.size());
     Assert.assertTrue("ROLE_ASTRO_2012".equals(roles.get(0).getName())
             || "ROLE_MATH_2012".equals(roles.get(0).getName()));

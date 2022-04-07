@@ -39,12 +39,14 @@ import org.opencastproject.assetmanager.api.query.ASelectQuery;
 import org.opencastproject.assetmanager.api.query.Predicate;
 import org.opencastproject.assetmanager.api.query.Target;
 import org.opencastproject.assetmanager.api.query.VersionField;
+import org.opencastproject.elasticsearch.api.SearchResult;
+import org.opencastproject.elasticsearch.index.ElasticsearchIndex;
+import org.opencastproject.elasticsearch.index.objects.event.EventSearchQuery;
 import org.opencastproject.job.api.JobContext;
 import org.opencastproject.mediapackage.DefaultMediaPackageSerializerImpl;
 import org.opencastproject.mediapackage.MediaPackage;
 import org.opencastproject.mediapackage.MediaPackageBuilder;
 import org.opencastproject.mediapackage.MediaPackageBuilderFactory;
-import org.opencastproject.message.broker.api.MessageSender;
 import org.opencastproject.metadata.api.MediaPackageMetadataService;
 import org.opencastproject.security.api.AccessControlList;
 import org.opencastproject.security.api.AclScope;
@@ -79,7 +81,6 @@ import org.apache.commons.io.IOUtils;
 import org.easymock.EasyMock;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.File;
@@ -178,9 +179,6 @@ public class WorkflowOperationSkippingTest {
     dao = new WorkflowServiceSolrIndex();
     dao.solrRoot = sRoot + File.separator + "solr." + System.currentTimeMillis();
 
-    MessageSender messageSender = EasyMock.createNiceMock(MessageSender.class);
-    EasyMock.replay(messageSender);
-
     AuthorizationService authzService = EasyMock.createNiceMock(AuthorizationService.class);
     EasyMock.expect(authzService.getActiveAcl((MediaPackage) EasyMock.anyObject()))
             .andReturn(Tuple.tuple(acl, AclScope.Series)).anyTimes();
@@ -235,7 +233,6 @@ public class WorkflowOperationSkippingTest {
     dao.activate("System Admin");
     service.setDao(dao);
     service.setServiceRegistry(serviceRegistry);
-    service.setMessageSender(messageSender);
     service.setUserDirectoryService(userDirectoryService);
     service.activate(null);
 
@@ -255,6 +252,15 @@ public class WorkflowOperationSkippingTest {
       e.printStackTrace();
       Assert.fail(e.getMessage());
     }
+
+    SearchResult result = EasyMock.createNiceMock(SearchResult.class);
+
+    final ElasticsearchIndex index = EasyMock.createNiceMock(ElasticsearchIndex.class);
+    EasyMock.expect(index.getIndexName()).andReturn("index").anyTimes();
+    EasyMock.expect(index.getByQuery(EasyMock.anyObject(EventSearchQuery.class))).andReturn(result).anyTimes();
+    EasyMock.replay(result, index);
+
+    service.setIndex(index);
   }
 
   @After
@@ -297,36 +303,6 @@ public class WorkflowOperationSkippingTest {
     WorkflowInstance instance3FromDb = service.getWorkflowById(instance3.getId());
     assertNotNull(instance3FromDb);
     assertEquals(OperationState.SKIPPED, instance3FromDb.getOperations().get(0).getState());
-  }
-
-  @Test
-  @Ignore
-  // Unless attribute is currently not being evaluated
-  public void testUnless() throws Exception {
-    Map<String, String> properties1 = new HashMap<String, String>();
-    properties1.put("skipcondition", "true");
-
-    Map<String, String> properties2 = new HashMap<String, String>();
-    properties2.put("skipcondition", "false");
-
-    WorkflowInstance instance = startAndWait(workingDefinition, mediapackage1, properties1, WorkflowState.SUCCEEDED);
-    WorkflowInstance instance2 = startAndWait(workingDefinition, mediapackage1, properties2, WorkflowState.SUCCEEDED);
-    WorkflowInstance instance3 = startAndWait(workingDefinition, mediapackage1, null, WorkflowState.SUCCEEDED);
-
-    // See if the skip operation has been executed
-    WorkflowInstance instanceFromDb = service.getWorkflowById(instance.getId());
-    assertNotNull(instanceFromDb);
-    assertEquals(OperationState.SKIPPED, instanceFromDb.getOperations().get(1).getState());
-
-    // See if the skip operation has been skipped (skip value != "true")
-    WorkflowInstance instance2FromDb = service.getWorkflowById(instance2.getId());
-    assertNotNull(instance2FromDb);
-    assertEquals(OperationState.SKIPPED, instance2FromDb.getOperations().get(1).getState());
-
-    // See if the skip operation has been skipped (skip property is undefined)
-    WorkflowInstance instance3FromDb = service.getWorkflowById(instance3.getId());
-    assertNotNull(instance3FromDb);
-    assertEquals(OperationState.SUCCEEDED, instance3FromDb.getOperations().get(1).getState());
   }
 
   protected WorkflowInstance startAndWait(WorkflowDefinition definition, MediaPackage mp,

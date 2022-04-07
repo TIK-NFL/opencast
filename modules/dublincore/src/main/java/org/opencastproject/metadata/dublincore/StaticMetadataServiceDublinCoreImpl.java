@@ -41,7 +41,6 @@ import static org.opencastproject.metadata.dublincore.DublinCore.PROPERTY_TEMPOR
 import static org.opencastproject.metadata.dublincore.DublinCore.PROPERTY_TITLE;
 import static org.opencastproject.metadata.dublincore.DublinCore.PROPERTY_TYPE;
 import static org.opencastproject.util.data.Collections.head;
-import static org.opencastproject.util.data.Collections.list;
 import static org.opencastproject.util.data.Monadics.mlist;
 import static org.opencastproject.util.data.Option.option;
 import static org.opencastproject.util.data.Option.some;
@@ -50,6 +49,7 @@ import org.opencastproject.mediapackage.Catalog;
 import org.opencastproject.mediapackage.MediaPackage;
 import org.opencastproject.mediapackage.MediaPackageElementFlavor;
 import org.opencastproject.mediapackage.MediaPackageElements;
+import org.opencastproject.mediapackage.MediaPackageSerializer;
 import org.opencastproject.metadata.api.MetadataValue;
 import org.opencastproject.metadata.api.StaticMetadata;
 import org.opencastproject.metadata.api.StaticMetadataService;
@@ -66,6 +66,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.InputStream;
+import java.net.URI;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -90,8 +91,20 @@ public class StaticMetadataServiceDublinCoreImpl implements StaticMetadataServic
 
   protected Workspace workspace = null;
 
+  protected MediaPackageSerializer serializer = null;
+
   public void setWorkspace(Workspace workspace) {
     this.workspace = workspace;
+  }
+
+  public void setMediaPackageSerializer(MediaPackageSerializer serializer) {
+    this.serializer = serializer;
+  }
+
+  public void unsetMediaPackageSerializer(MediaPackageSerializer serializer) {
+    if (this.serializer == serializer) {
+      this.serializer = null;
+    }
   }
 
   public void activate(@SuppressWarnings("rawtypes") Map properties) {
@@ -116,16 +129,11 @@ public class StaticMetadataServiceDublinCoreImpl implements StaticMetadataServic
    */
   @Override
   public StaticMetadata getMetadata(final MediaPackage mp) {
-    return mlist(list(mp.getCatalogs(DublinCoreCatalog.ANY_DUBLINCORE)))
-            .find(flavorPredicate(MediaPackageElements.EPISODE))
-            .flatMap(loader)
-            .map(new Function<DublinCoreCatalog, StaticMetadata>() {
-              @Override
-              public StaticMetadata apply(DublinCoreCatalog episode) {
-                return newStaticMetadataFromEpisode(episode);
-              }
-            })
-            .getOrElse((StaticMetadata) null);
+    Catalog[] catalogs = mp.getCatalogs(MediaPackageElements.EPISODE);
+    if (catalogs.length > 0) {
+      return newStaticMetadataFromEpisode(DublinCoreUtil.loadDublinCore(workspace, catalogs[0]));
+    }
+    return null;
   }
 
   private static StaticMetadata newStaticMetadataFromEpisode(DublinCoreCatalog episode) {
@@ -386,7 +394,9 @@ public class StaticMetadataServiceDublinCoreImpl implements StaticMetadataServic
   private Option<DublinCoreCatalog> load(Catalog catalog) {
     InputStream in = null;
     try {
-      in = workspace.read(catalog.getURI());
+      URI uri = catalog.getURI();
+      if (serializer != null) uri = serializer.decodeURI(uri);
+      in = workspace.read(uri);
       return some((DublinCoreCatalog) DublinCores.read(in));
     } catch (Exception e) {
       logger.warn("Unable to load metadata from catalog '{}'", catalog);

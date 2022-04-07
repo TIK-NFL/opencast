@@ -42,8 +42,6 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -59,9 +57,6 @@ import de.schlichtherle.io.FileOutputStream;
  * Tests XACML features of the security service
  */
 public class XACMLSecurityTest {
-
-  /** The logger */
-  protected static final Logger logger = LoggerFactory.getLogger(XACMLSecurityTest.class);
 
   /** The username to use with the security service */
   protected final String currentUser = "me";
@@ -93,15 +88,22 @@ public class XACMLSecurityTest {
     Workspace workspace = EasyMock.createMock(Workspace.class);
     final Capture<InputStream> in = EasyMock.newCapture();
     final Capture<URI> uri = EasyMock.newCapture();
-    EasyMock.expect(workspace.put(EasyMock.anyString(), EasyMock.anyString(), EasyMock.anyString(),
-            EasyMock.capture(in))).andAnswer(() -> {
-        final File file = testFolder.newFile();
-        FileOutputStream out = new FileOutputStream(file);
-        IOUtils.copyLarge(in.getValue(), out);
-        IOUtils.closeQuietly(out);
-        IOUtils.closeQuietly(in.getValue());
-        return file.toURI();
-      }).anyTimes();
+    EasyMock
+        .expect(workspace.put(
+            EasyMock.anyString(),
+            EasyMock.anyString(),
+            EasyMock.anyString(),
+            EasyMock.capture(in)
+        ))
+        .andAnswer(() -> {
+          final File file = testFolder.newFile();
+          FileOutputStream out = new FileOutputStream(file);
+          IOUtils.copyLarge(in.getValue(), out);
+          IOUtils.closeQuietly(out);
+          IOUtils.closeQuietly(in.getValue());
+          return file.toURI();
+        })
+        .anyTimes();
     EasyMock.expect(workspace.get(EasyMock.capture(uri), EasyMock.captureBoolean(EasyMock.newCapture())))
             .andAnswer(() -> {
               File dest = testFolder.newFile();

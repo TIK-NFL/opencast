@@ -50,7 +50,6 @@ import java.util.regex.Pattern;
 
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
-import javax.xml.parsers.SAXParserFactory;
 
 /**
  * This class represents the mime type registry that is responsible for providing resolving mime types through all
@@ -95,6 +94,8 @@ public final class MimeTypes {
   public static final MimeType JAR;
   public static final MimeType SMIL;
   public static final MimeType PNG;
+  public static final MimeType HLS;
+  public static final MimeType DASH;
 
   // Initialize common mime types
   static {
@@ -115,11 +116,12 @@ public final class MimeTypes {
     JAR = MimeTypes.parseMimeType("application/java-archive");
     SMIL = MimeTypes.parseMimeType("application/smil");
     PNG = MimeTypes.parseMimeType("image/png");
+    HLS = MimeTypes.parseMimeType("application/X-mpegURL");
+    DASH = MimeTypes.parseMimeType("application/dash+xml");
 
     // initialize from file
     try {
-      SAXParserFactory parserFactory = SAXParserFactory.newInstance();
-      SAXParser parser = parserFactory.newSAXParser();
+      SAXParser parser = XmlSafeParser.newSAXParserFactory().newSAXParser();
       DefaultHandler handler = new MimeTypeParser(mimeTypes);
 
       try (InputStream inputStream = MimeTypes.class.getResourceAsStream(DEFINITION_FILE)) {
@@ -136,12 +138,13 @@ public final class MimeTypes {
     @Override
     public Opt<MimeType> apply(String name) {
       try {
-        return Opt.some(fromString(name));
+        return Opt.some(parseMimeType(name));
       } catch (Exception e) {
         return Opt.none();
       }
     }
   };
+
 
   /**
    * Returns a mime type for the given type and subtype, e. g. <code>video/mj2</code>.

@@ -27,7 +27,6 @@ import org.opencastproject.message.broker.api.MessageSender;
 import org.opencastproject.message.broker.api.assetmanager.AssetManagerItem;
 import org.opencastproject.security.api.SecurityService;
 
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.osgi.service.component.ComponentContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,8 +62,9 @@ public class ConductingEpisodeUpdatedEventHandler {
 
   public void deactivate(ComponentContext cc) {
     logger.info("Deactivating {}", ConductingEpisodeUpdatedEventHandler.class.getName());
-    if (messageWatcher != null)
+    if (messageWatcher != null) {
       messageWatcher.stopListening();
+    }
 
     singleThreadExecutor.shutdown();
   }
@@ -106,7 +106,7 @@ public class ConductingEpisodeUpdatedEventHandler {
         } catch (CancellationException e) {
           logger.trace("Listening for episode update messages has been cancelled.");
         } catch (Throwable t) {
-          logger.error("Problem while getting episode update message events {}", ExceptionUtils.getStackTrace(t));
+          logger.error("Problem while getting episode update message events", t);
         } finally {
           securityService.setOrganization(null);
           securityService.setUser(null);

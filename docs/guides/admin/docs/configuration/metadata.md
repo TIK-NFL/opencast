@@ -1,18 +1,18 @@
 Overview
 ========================
 
-In Opencast, metadata is stored in so-called metadata catalogs. For each event or series, an arbiraty number of
-such configurable metadata catalog can be managed. A common set of metadata has been standarized to form a
+In Opencast, metadata is stored in so-called metadata catalogs. For each event or series, an arbitrary number of
+such configurable metadata catalogs can be managed. A common set of metadata has been standardized to form a
 common basis (standard metadata), whereas administrators can configure Opencast to support other metadata sets
 (extended metadata).
 
-This document provides an overview over Opencast's metadata capabilities and its configuration.
+This document provides an overview of Opencast's metadata capabilities and its configuration.
 
 ## Standard Metadata
 
-For both events and series, a common set of metadata is supported by Opencast out-of-the box. Since metadata catalogs
+For both events and series, a common set of metadata is supported by Opencast out of the box. Since metadata catalogs
 are referenced from within media package, flavors can be used to identify a specific metadata catalog. The following
-flavors are treated by Opencast as standard metadata in means of Opencast expects them to be present:
+flavors are treated by Opencast as standard metadata, meaning Opencast expects them to be present:
 
 * `dublincore/episode` holds the standard metadata of an event
 * `dublincore/series` holds the standard metadata of a series
@@ -21,23 +21,23 @@ Opencast assumes specific metadata fields to be present in the standard metadata
 filters, table columns and search indices.
 
 To adjust the standard metadata to your specific needs, you can configure them in
-`/opt/opencast/etc/org.opencastproject.ui.metadata.CatalogUIAdapterFactory-episode-common.cfg` and
-`/opt/opencast/etc/org.opencastproject.ui.metadata.CatalogUIAdapterFactory-series-common.cfg`.
+`etc/org.opencastproject.ui.metadata.CatalogUIAdapterFactory-episode-common.cfg` and
+`etc/org.opencastproject.ui.metadata.CatalogUIAdapterFactory-series-common.cfg`.
 
-For details on how to configure metadata catalogs, see section Configuring Metadata Catalogs.
+For details on how to configure metadata catalogs, see the section Metadata Catalog Configuration.
 
-As mentioned above, however, Opencast expects specific metafields to be present to work correctly. In case you want
-to map metadata specific to your use case, you might consider to use the extended metadata capbilities of Opencast
+As mentioned above, however, Opencast expects specific metadata fields to be present to work correctly. In case you want
+to map metadata specific to your use case, you might consider using the extended metadata capabilities of Opencast
 described in the next section.
 
 ## Extended Metadata
 
-For both events and series, Opencast support an arbitrary number of customized metadata catalogs.
+For both events and series, Opencast supports an arbitrary number of customized metadata catalogs.
 
 To add extended metadata catalogs, create a configuration file with a valid filename of the form
-`org.opencastproject.ui.metadata.CatalogUIAdapterFactory-<name>.cfg` in `/opt/opencast/etc.` on the admin node.
+`org.opencastproject.ui.metadata.CatalogUIAdapterFactory-<name>.cfg` in `etc/`. on the admin node.
 
-For details on how to configure metadata catalogs, see section Configuring Metadata Catalogs.
+For details on how to configure metadata catalogs, see the section Metadata Catalog Configuration.
 
 Limitations:
 
@@ -84,22 +84,22 @@ output id to make it easy to find.
 
 |Configuration key |Example |Description |
 |------------------|--------|------------|
-|property.{field-id}.inputID\* |title |The id used to identify this property in the catalog e.g. The name of the property inside the xml file of a Dublin Core catalog. If an outputID is not specified then this inputID is used for both the catalog and the front end id. This value is mandatory.|
+|property.{field-id}.inputID¹ |title |The id used to identify this property in the catalog e.g. The name of the property inside the xml file of a Dublin Core catalog. If an outputID is not specified then this inputID is used for both the catalog and the front end id. This value is mandatory.|
 |property.{field-id}.outputID |title |The id used inside the json for this property. If this value is missing then the inputID will be used instead.|
 |property.{field-id}.namespace |http://purl.org/dc/terms/ |The URL that represents the namespace for this property. Different properties in the same catalog can have different namespaces.|
-|property.{field-id}.label |"EVENTS.EVENTS.DETAILS.METADATA.TITLE" or "Event Title" |The label to show for this property in the UI. If there is a i18n support for a label that should be the value used so that it will be translated, if you don't mind it being locked to one translation just put that single value in.|
-|property.{field-id}.type |text |The type of the metadata field. |
-|property.{field-id}.pattern |yyyy-MM-dd |Applies to date and time types for now. It is used to format their values using the java DateTimeFormatter values\**|
+|property.{field-id}.label¹ |"EVENTS.EVENTS.DETAILS.METADATA.TITLE" or "Event Title" |The label to show for this property in the UI. If there is a i18n support for a label that should be the value used so that it will be translated, if you don't mind it being locked to one translation just put that single value in.|
+|property.{field-id}.type¹ |text |The type of the metadata field. |
+|property.{field-id}.pattern |yyyy-MM-dd |Applies to date and time types for now. It is used to format their values using the java DateTimeFormatter values²|
 |property.{field-id}.delimiter |;|For mixed_text and iterable_text type fields, a string at which inputs into the corresponding fields are split into individual values for easier bulk entry of lists. The default is no delimiter, in which case no splitting takes place.|
-|property.{field-id}.readOnly |false |If the property can be edited in the UI or if it should only be displayed. |
-|property.{field-id}.required |true |If the property has to have a value before the metadata can be saved (the UI's save button will be disabled until all of the required fields are entered)|
+|property.{field-id}.readOnly¹ |false |If the property can be edited in the UI or if it should only be displayed. |
+|property.{field-id}.required¹ |true |If the property has to have a value before the metadata can be saved (the UI's save button will be disabled until all of the required fields are entered)|
 |property.{field-id}.collectionID |USERS |The id of the list provider that will be used to validate the input in the backend. So for example entering a username that doesn't exist will throw an error in this case.|
 |property.{field-id}.listprovider |USERS  |The id of the list provider that will be used as a drop down option for that field. So for example using the USERS list provider means that in the front end the user will be able to choose the field value from the list of users in Opencast.|
 |property.{field-id}.order |3 |Defines the order of properties where this property should be oriented in the UI i.e. 0 means the property should come first, 1 means it should come second etc. Giving two properties the same number will cause them to be next to one another but doesn't guarantee one above or below the other.|
 
-\* Mandatory field attribute
+¹ Mandatory field attribute
 
-\** See https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html
+² See [DateTimeFormatter](https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html)
 
 **Field types**
 
@@ -108,7 +108,7 @@ output id to make it easy to find.
 |boolean       |Represents a true / false value in the UI that is represented by a check box.|false|false|             |
 |date          |A Java Date object that can include the year, month, day, hour, minute second ... and is formatted by the pattern value. |2014-12-10T16:29:43Z |2014-12-10| |
 |text          |A text input value for entering in one line of text. It supports more, it just won't increase in size for the interface. |This is the Title |This is the Title| |
-|text_long     |A textarea which allows for more than 1 row of text|Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.|Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. | {<br>"id": "notesEpisode",<br>"readOnly": false,<br>"value": "",<br>"label": "Notes",<br>"required": false,<br>"type":"text_long"<br>}|
+|text_long     |A text area which allows for more than 1 row of text|Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.|Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. | {<br>"id": "notesEpisode",<br>"readOnly": false,<br>"value": "",<br>"label": "Notes",<br>"required": false,<br>"type":"text_long"<br>}|
 |iterable_text |A text input value for entering in a list of text objects that are comma separated in the front end but stored separately in the catalog.|<presenter>Adam,Basil,Lukas</presenter>|value : ["Adam","Basil","Lukas"]|{<br>"id": "contributor",<br> "readOnly": true,<br>"value": ["Adam", "Basil", "Lukas"],<br>"label": "Contributor(s)",<br>"required": false,<br>"type": "text"<br>}|
 |start_date   |The start date portion of a Dublin Core Catalog Period. |start=2014-11-04T19:00:00Z; end=2014-11-05T20:00:00Z; scheme=W3C-DTF; |2014-11-04| |
 |start_time   |The start time portion of a Dublin Core Catalog Period. |start=2014-11-04T19:00:00Z; end=2014-11-05T20:00:00Z; scheme=W3C-DTF; |19:00:00 | |

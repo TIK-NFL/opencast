@@ -136,8 +136,9 @@ public abstract class AssetManagerItem implements MessageItem, Serializable {
     }
 
     public Opt<DublinCoreCatalog> getEpisodeDublincore() {
-      if (episodeDublincore == null)
+      if (episodeDublincore == null) {
         return Opt.none();
+      }
 
       try (InputStream is = IOUtils.toInputStream(episodeDublincore, "UTF-8")) {
         return Opt.some(DublinCores.read(is));
@@ -159,24 +160,18 @@ public abstract class AssetManagerItem implements MessageItem, Serializable {
       }
     };
 
-    public static final Fn<TakeSnapshot, Opt<DublinCoreCatalog>> getEpisodeDublincore = new Fn<TakeSnapshot, Opt<DublinCoreCatalog>>() {
-      @Override
-      public Opt<DublinCoreCatalog> apply(TakeSnapshot a) {
-        return a.getEpisodeDublincore();
-      }
-    };
+    public static final Fn<TakeSnapshot, Opt<DublinCoreCatalog>> getEpisodeDublincore
+        = new Fn<TakeSnapshot, Opt<DublinCoreCatalog>>() {
+          @Override
+          public Opt<DublinCoreCatalog> apply(TakeSnapshot a) {
+            return a.getEpisodeDublincore();
+          }
+        };
 
     public static final Fn<TakeSnapshot, AccessControlList> getAcl = new Fn<TakeSnapshot, AccessControlList>() {
       @Override
       public AccessControlList apply(TakeSnapshot a) {
         return a.getAcl();
-      }
-    };
-
-    public static final Fn<TakeSnapshot, Long> getVersion = new Fn<TakeSnapshot, Long>() {
-      @Override
-      public Long apply(TakeSnapshot a) {
-        return a.getVersion();
       }
     };
 
@@ -215,10 +210,6 @@ public abstract class AssetManagerItem implements MessageItem, Serializable {
       return getId();
     }
 
-    public long getVersion() {
-      return version;
-    }
-
     public static final Fn<DeleteSnapshot, String> getMediaPackageId = new Fn<DeleteSnapshot, String>() {
       @Override
       public String apply(DeleteSnapshot a) {
@@ -226,12 +217,6 @@ public abstract class AssetManagerItem implements MessageItem, Serializable {
       }
     };
 
-    public static final Fn<DeleteSnapshot, Long> getVersion = new Fn<DeleteSnapshot, Long>() {
-      @Override
-      public Long apply(DeleteSnapshot a) {
-        return a.getVersion();
-      }
-    };
   }
 
   /*
@@ -303,7 +288,7 @@ public abstract class AssetManagerItem implements MessageItem, Serializable {
                 mp.getIdentifier()), e);
       }
     }
-    return new TakeSnapshot(mp.getIdentifier().compact(), MediaPackageParser.getAsXml(mp), dcXml,
+    return new TakeSnapshot(mp.getIdentifier().toString(), MediaPackageParser.getAsXml(mp), dcXml,
             AccessControlParser.toJsonSilent(acl), version, date);
   }
 

@@ -45,12 +45,12 @@ import org.opencastproject.authorization.xacml.manager.endpoint.JsonConv;
 import org.opencastproject.authorization.xacml.manager.impl.ManagedAclImpl;
 import org.opencastproject.index.service.resources.list.query.AclsListQuery;
 import org.opencastproject.index.service.util.RestUtils;
-import org.opencastproject.matterhorn.search.SearchQuery.Order;
-import org.opencastproject.matterhorn.search.SortCriterion;
 import org.opencastproject.security.api.AccessControlEntry;
 import org.opencastproject.security.api.AccessControlList;
 import org.opencastproject.security.api.AccessControlParser;
 import org.opencastproject.security.api.Organization;
+import org.opencastproject.security.api.Role;
+import org.opencastproject.security.api.RoleDirectoryService;
 import org.opencastproject.security.api.SecurityService;
 import org.opencastproject.util.NotFoundException;
 import org.opencastproject.util.data.Option;
@@ -58,6 +58,8 @@ import org.opencastproject.util.doc.rest.RestParameter;
 import org.opencastproject.util.doc.rest.RestQuery;
 import org.opencastproject.util.doc.rest.RestResponse;
 import org.opencastproject.util.doc.rest.RestService;
+import org.opencastproject.util.requests.SortCriterion;
+import org.opencastproject.util.requests.SortCriterion.Order;
 
 import com.entwinemedia.fn.Fn;
 import com.entwinemedia.fn.Stream;
@@ -69,7 +71,12 @@ import com.entwinemedia.fn.data.json.JValue;
 
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.json.simple.JSONArray;
+import org.json.simple.JSONObject;
 import org.osgi.service.component.ComponentContext;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -102,6 +109,15 @@ import javax.ws.rs.core.Response;
               + "<em>This service is for exclusive use by the module admin-ui. Its API might change "
               + "anytime without prior notice. Any dependencies other than the admin UI will be strictly ignored. "
               + "DO NOT use this for integration of third-party applications.<em>"})
+@Component(
+        immediate = true,
+        service = AclEndpoint.class,
+        property = {
+                "service.description=Admin UI - ACL Endpoint",
+                "opencast.service.type=org.opencastproject.adminui.AclEndpoint",
+                "opencast.service.path=/admin-ng/acl",
+        }
+)
 public class AclEndpoint {
 
   /** The logging facility */
@@ -113,23 +129,35 @@ public class AclEndpoint {
   /** The security service */
   private SecurityService securityService;
 
+  // The role directory service
+  private RoleDirectoryService roleDirectoryService;
+
   /**
    * @param aclServiceFactory
    *          the aclServiceFactory to set
    */
+  @Reference
   public void setAclServiceFactory(AclServiceFactory aclServiceFactory) {
     this.aclServiceFactory = aclServiceFactory;
+  }
+
+  /** OSGi callback for role directory service. */
+  @Reference
+  public void setRoleDirectoryService(RoleDirectoryService roleDirectoryService) {
+    this.roleDirectoryService = roleDirectoryService;
   }
 
   /**
    * @param securityService
    *          the securityService to set
    */
+  @Reference
   public void setSecurityService(SecurityService securityService) {
     this.securityService = securityService;
   }
 
   /** OSGi callback. */
+  @Activate
   protected void activate(ComponentContext cc) {
     logger.info("Activate the Admin ui - Acl facade endpoint");
   }
@@ -145,7 +173,7 @@ public class AclEndpoint {
           @RestParameter(name = "filter", isRequired = false, description = "The filter used for the query. They should be formated like that: 'filter1:value1,filter2:value2'", type = STRING),
           @RestParameter(name = "sort", isRequired = false, description = "The sort order. May include any of the following: NAME. Add '_DESC' to reverse the sort order (e.g. NAME_DESC).", type = STRING),
           @RestParameter(defaultValue = "100", description = "The maximum number of items to return per page.", isRequired = false, name = "limit", type = RestParameter.Type.STRING),
-          @RestParameter(defaultValue = "0", description = "The page number.", isRequired = false, name = "offset", type = RestParameter.Type.STRING) }, reponses = { @RestResponse(responseCode = SC_OK, description = "The list of ACL's has successfully been returned") })
+          @RestParameter(defaultValue = "0", description = "The page number.", isRequired = false, name = "offset", type = RestParameter.Type.STRING) }, responses = { @RestResponse(responseCode = SC_OK, description = "The list of ACL's has successfully been returned") })
   public Response getAclsAsJson(@QueryParam("filter") String filter, @QueryParam("sort") String sort,
           @QueryParam("offset") int offset, @QueryParam("limit") int limit) throws IOException {
     if (limit < 1)
@@ -206,9 +234,58 @@ public class AclEndpoint {
     return okJsonList(aclJSON, offset, limit, total);
   }
 
+  @GET
+  @Path("roles.json")
+  @Produces(MediaType.APPLICATION_JSON)
+  @RestQuery(name = "getRoles", description = "Returns a list of roles",
+             returnDescription = "Returns a JSON representation of the roles with the given parameters under the "
+                               + "current user's organization.",
+             restParameters = {
+               @RestParameter(name = "query", isRequired = false, description = "The query.", type = STRING),
+               @RestParameter(name = "target", isRequired = false, description = "The target of the roles.",
+                              type = STRING),
+               @RestParameter(name = "limit", defaultValue = "100",
+                              description = "The maximum number of items to return per page.", isRequired = false,
+                              type = RestParameter.Type.STRING),
+               @RestParameter(name = "offset", defaultValue = "0", description = "The page number.", isRequired = false,
+                              type = RestParameter.Type.STRING) },
+             responses = { @RestResponse(responseCode = SC_OK, description = "The list of roles.") })
+  public Response getRoles(@QueryParam("query") String query, @QueryParam("target") String target,
+                           @QueryParam("offset") int offset, @QueryParam("limit") int limit) {
+
+    String roleQuery = "%";
+    if (StringUtils.isNotBlank(query)) {
+      roleQuery = query.trim() + "%";
+    }
+
+    Role.Target roleTarget = Role.Target.ALL;
+
+    if (StringUtils.isNotBlank(target)) {
+      try {
+        roleTarget = Role.Target.valueOf(target.trim());
+      } catch (Exception e) {
+        logger.warn("Invalid target filter value {}", target);
+      }
+    }
+
+    List<Role> roles = roleDirectoryService.findRoles(roleQuery, roleTarget, offset, limit);
+
+    JSONArray jsonRoles = new JSONArray();
+    for (Role role: roles) {
+      JSONObject jsonRole = new JSONObject();
+      jsonRole.put("name", role.getName());
+      jsonRole.put("type", role.getType().toString());
+      jsonRole.put("description", role.getDescription());
+      jsonRole.put("organization", role.getOrganizationId());
+      jsonRoles.add(jsonRole);
+    }
+
+    return Response.ok(jsonRoles.toJSONString()).build();
+  }
+
   @DELETE
   @Path("{id}")
-  @RestQuery(name = "deleteacl", description = "Delete an ACL", returnDescription = "Delete an ACL", pathParameters = { @RestParameter(name = "id", isRequired = true, description = "The ACL identifier", type = INTEGER) }, reponses = {
+  @RestQuery(name = "deleteacl", description = "Delete an ACL", returnDescription = "Delete an ACL", pathParameters = { @RestParameter(name = "id", isRequired = true, description = "The ACL identifier", type = INTEGER) }, responses = {
           @RestResponse(responseCode = SC_OK, description = "The ACL has successfully been deleted"),
           @RestResponse(responseCode = SC_NOT_FOUND, description = "The ACL has not been found"),
           @RestResponse(responseCode = SC_CONFLICT, description = "The ACL could not be deleted, there are still references on it") })
@@ -228,7 +305,7 @@ public class AclEndpoint {
   @Produces(MediaType.APPLICATION_JSON)
   @RestQuery(name = "createacl", description = "Create an ACL", returnDescription = "Create an ACL", restParameters = {
           @RestParameter(name = "name", isRequired = true, description = "The ACL name", type = STRING),
-          @RestParameter(name = "acl", isRequired = true, description = "The access control list", type = STRING) }, reponses = {
+          @RestParameter(name = "acl", isRequired = true, description = "The access control list", type = STRING) }, responses = {
           @RestResponse(responseCode = SC_OK, description = "The ACL has successfully been added"),
           @RestResponse(responseCode = SC_CONFLICT, description = "An ACL with the same name already exists"),
           @RestResponse(responseCode = SC_BAD_REQUEST, description = "Unable to parse the ACL") })
@@ -247,7 +324,7 @@ public class AclEndpoint {
   @Produces(MediaType.APPLICATION_JSON)
   @RestQuery(name = "updateacl", description = "Update an ACL", returnDescription = "Update an ACL", pathParameters = { @RestParameter(name = "id", isRequired = true, description = "The ACL identifier", type = INTEGER) }, restParameters = {
           @RestParameter(name = "name", isRequired = true, description = "The ACL name", type = STRING),
-          @RestParameter(name = "acl", isRequired = true, description = "The access control list", type = STRING) }, reponses = {
+          @RestParameter(name = "acl", isRequired = true, description = "The access control list", type = STRING) }, responses = {
           @RestResponse(responseCode = SC_OK, description = "The ACL has successfully been updated"),
           @RestResponse(responseCode = SC_NOT_FOUND, description = "The ACL has not been found"),
           @RestResponse(responseCode = SC_BAD_REQUEST, description = "Unable to parse the ACL") })
@@ -266,7 +343,7 @@ public class AclEndpoint {
   @GET
   @Path("{id}")
   @Produces(MediaType.APPLICATION_JSON)
-  @RestQuery(name = "getacl", description = "Return the ACL by the given id", returnDescription = "Return the ACL by the given id", pathParameters = { @RestParameter(name = "id", isRequired = true, description = "The ACL identifier", type = INTEGER) }, reponses = {
+  @RestQuery(name = "getacl", description = "Return the ACL by the given id", returnDescription = "Return the ACL by the given id", pathParameters = { @RestParameter(name = "id", isRequired = true, description = "The ACL identifier", type = INTEGER) }, responses = {
           @RestResponse(responseCode = SC_OK, description = "The ACL has successfully been returned"),
           @RestResponse(responseCode = SC_NOT_FOUND, description = "The ACL has not been found") })
   public Response getAcl(@PathParam("id") long aclId) throws NotFoundException {

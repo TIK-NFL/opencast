@@ -124,14 +124,8 @@ public abstract class AbstractFeedGenerator implements FeedGenerator {
   /** A default value for limit */
   protected static final int DEFAULT_LIMIT = 100;
 
-  /** Unlimited */
-  protected static final int NO_LIMIT = Integer.MAX_VALUE;
-
   /** A default value for offset */
   protected static final int DEFAULT_OFFSET = 0;
-
-  /** The date parser format **/
-  protected static final String DATE_FORMAT = "dd.MM.yyyy HH:mm:ss";
 
   /** The default feed encoding */
   public static final String ENCODING = "UTF-8";
@@ -225,13 +219,16 @@ public abstract class AbstractFeedGenerator implements FeedGenerator {
     this();
     this.uri = uri;
     this.home = feedHome;
-    if (rssFlavors != null)
+    if (rssFlavors != null) {
       this.rssTrackFlavors.addAll(Arrays.asList(rssFlavors));
-    if (rssMediaTypes != null)
+    }
+    if (rssMediaTypes != null) {
       this.rssMediaTypes.addAll(Arrays.asList(rssMediaTypes));
+    }
     this.linkTemplate = entryLinkTemplate;
-    if (atomFlavors != null)
+    if (atomFlavors != null) {
       this.atomTrackFlavors.addAll(Arrays.asList(atomFlavors));
+    }
   }
 
   /**
@@ -249,8 +246,9 @@ public abstract class AbstractFeedGenerator implements FeedGenerator {
     try {
       if (StringUtils.isNotBlank(sizeAsString)) {
         size = Integer.parseInt(sizeAsString);
-        if (size == 0)
+        if (size == 0) {
           size = Integer.MAX_VALUE;
+        }
       }
     } catch (NumberFormatException e) {
       logger.warn("Unable to set the size of the feed to {}", sizeAsString, e);
@@ -267,8 +265,9 @@ public abstract class AbstractFeedGenerator implements FeedGenerator {
       cover = (String) properties.get(PROP_COVER);
     }
     linkTemplate = (String) properties.get(PROP_ENTRY);
-    if (properties.get(PROP_SELF) != null)
+    if (properties.get(PROP_SELF) != null) {
       linkSelf = (String) properties.get(PROP_SELF);
+    }
 
     String rssFlavors = (String) properties.get(PROP_RSSFLAVORS);
     if (rssFlavors != null) {
@@ -447,19 +446,6 @@ public abstract class AbstractFeedGenerator implements FeedGenerator {
   }
 
   /**
-   * Returns the link to the feed itself.
-   *
-   * @param organization
-   *          the organization
-   * @return the link to the feed
-   */
-  public String getLinkToSelf(Organization organization) {
-    String feedURL = organization.getProperties().get(PROP_ORG_FEED_URL);
-    String engageUIURL = organization.getProperties().get(PROP_ORG_ENGAGE_UI_URL);
-    return ensureUrl(linkSelf, feedURL, engageUIURL, serverUrl);
-  }
-
-  /**
    * Returns the feed uri
    *
    * @param feedId
@@ -503,12 +489,14 @@ public abstract class AbstractFeedGenerator implements FeedGenerator {
     searchQuery.withSort(SearchQuery.Sort.DATE_CREATED);
     switch (type) {
       case Atom:
-        if (atomTags != null && atomTags.size() > 0)
+        if (atomTags != null && atomTags.size() > 0) {
           searchQuery.withElementTags(atomTags.toArray(new String[atomTags.size()]));
+        }
         break;
       case RSS:
-        if (rssTags != null && rssTags.size() > 0)
+        if (rssTags != null && rssTags.size() > 0) {
           searchQuery.withElementTags(rssTags.toArray(new String[rssTags.size()]));
+        }
         break;
       default:
         throw new IllegalStateException("Unknown feed type '" + type + "' is not supported");
@@ -542,8 +530,9 @@ public abstract class AbstractFeedGenerator implements FeedGenerator {
     logger.debug("Started to create {} feed", type);
     SearchResult result = null;
 
-    if (type == null)
+    if (type == null) {
       throw new IllegalArgumentException("Feed type must not be null");
+    }
 
     if (size <= 0) {
       logger.trace("Using the feed's configured size of {}", this.size);
@@ -551,14 +540,18 @@ public abstract class AbstractFeedGenerator implements FeedGenerator {
     }
 
     // Check if the feed generator is correctly set up
-    if (uri == null)
+    if (uri == null) {
       throw new IllegalStateException("Feed uri (feed.uri) must be configured");
-    if (name == null)
+    }
+    if (name == null) {
       throw new IllegalStateException("Feed name (feed.name) must be configured");
-    if (getHome(organization) == null)
+    }
+    if (getHome(organization) == null) {
       throw new IllegalStateException("Feed url (feed.home) must be configured");
-    if (getLinkTemplate(organization) == null)
+    }
+    if (getLinkTemplate(organization) == null) {
       throw new IllegalStateException("Feed link template (feed.entry) must be configured");
+    }
 
     // Have the concrete implementation load the feed data
     result = loadFeedData(type, query, size, DEFAULT_OFFSET);
@@ -576,8 +569,9 @@ public abstract class AbstractFeedGenerator implements FeedGenerator {
     ITunesFeedExtension iTunesFeed = new ITunesFeedExtension();
     f.addModule(iTunesFeed);
 
-    if (cover != null)
+    if (cover != null) {
       f.setImage(new ImageImpl(cover, "Feed Image"));
+    }
 
     // Check if a default format has been specified
     // TODO: Parse flavor and set member variable rssTrackFlavor
@@ -587,16 +581,18 @@ public abstract class AbstractFeedGenerator implements FeedGenerator {
     int itemCount = 0;
     for (SearchResultItem resultItem : result.getItems()) {
       try {
-        if (resultItem.getType().equals(SearchResultItemType.Series))
+        if (resultItem.getType().equals(SearchResultItemType.Series)) {
           addSeries(f, query, resultItem, organization);
-        else
+        } else {
           addEpisode(f, query, resultItem, organization);
+        }
       } catch (Throwable t) {
         logger.error("Error creating entry with id {} for feed {}", resultItem.getId(), this, t);
       }
       itemCount++;
-      if (itemCount >= size)
+      if (itemCount >= size) {
         break;
+      }
     }
     return f;
   }
@@ -627,13 +623,15 @@ public abstract class AbstractFeedGenerator implements FeedGenerator {
       }
     }
 
-    if (!StringUtils.isEmpty(resultItem.getDcTitle()))
+    if (!StringUtils.isEmpty(resultItem.getDcTitle())) {
       feed.setTitle(resultItem.getDcTitle());
+    }
 
     if (!StringUtils.isEmpty(resultItem.getDcDescription())) {
       feed.setDescription(resultItem.getDcDescription());
-      if (iTunesFeed != null)
+      if (iTunesFeed != null) {
         iTunesFeed.setSummary(resultItem.getDcDescription());
+      }
     }
 
     if (!StringUtils.isEmpty(resultItem.getDcCreator())) {
@@ -645,20 +643,24 @@ public abstract class AbstractFeedGenerator implements FeedGenerator {
       }
     }
 
-    if (!StringUtils.isEmpty(resultItem.getDcContributor()))
+    if (!StringUtils.isEmpty(resultItem.getDcContributor())) {
       feed.addContributor(new PersonImpl(resultItem.getDcContributor()));
+    }
 
-    if (!StringUtils.isEmpty(resultItem.getDcAccessRights()))
+    if (!StringUtils.isEmpty(resultItem.getDcAccessRights())) {
       feed.setCopyright(resultItem.getDcAccessRights());
+    }
 
-    if (!StringUtils.isEmpty(resultItem.getDcLanguage()))
+    if (!StringUtils.isEmpty(resultItem.getDcLanguage())) {
       feed.setLanguage(resultItem.getDcLanguage());
+    }
 
     feed.setUri(resultItem.getId());
     feed.addLink(new LinkImpl(getLinkForEntry(feed, resultItem, organization)));
 
-    if (d != null)
+    if (d != null) {
       feed.setPublishedDate(d);
+    }
 
     // Set the cover image
     String coverUrl = null;
@@ -666,8 +668,9 @@ public abstract class AbstractFeedGenerator implements FeedGenerator {
       coverUrl = resultItem.getCover();
       feed.setImage(new ImageImpl(coverUrl, resultItem.getDcTitle()));
       try {
-        if (iTunesFeed != null)
+        if (iTunesFeed != null) {
           iTunesFeed.setImage(new URL(coverUrl));
+        }
       } catch (MalformedURLException e) {
         logger.error("Error creating cover URL: {}", coverUrl, e);
       }
@@ -724,10 +727,11 @@ public abstract class AbstractFeedGenerator implements FeedGenerator {
           entry.addLink(self);
         }
         feed.addEntry(entry);
-        if (feed.getUpdatedDate() == null)
+        if (feed.getUpdatedDate() == null) {
           feed.setUpdatedDate(entry.getUpdatedDate());
-        else if (entry.getUpdatedDate().before(feed.getUpdatedDate()))
+        } else if (entry.getUpdatedDate().before(feed.getUpdatedDate())) {
           feed.setUpdatedDate(entry.getUpdatedDate());
+        }
         break;
       default:
         throw new IllegalStateException("Unsupported feed type " + feed.getType());
@@ -763,8 +767,9 @@ public abstract class AbstractFeedGenerator implements FeedGenerator {
     iTunesEntry.setDuration(metadata.getDcExtent());
     iTunesEntry.setBlocked(false);
     iTunesEntry.setExplicit(false);
-    if (StringUtils.isNotBlank(metadata.getDcCreator()))
+    if (StringUtils.isNotBlank(metadata.getDcCreator())) {
       iTunesEntry.setAuthor(metadata.getDcCreator());
+    }
     // TODO: Add iTunes keywords and subtitles
     // iTunesEntry.setKeywords(keywords);
     // iTunesEntry.setSubtitle(subtitle);
@@ -786,8 +791,9 @@ public abstract class AbstractFeedGenerator implements FeedGenerator {
     // Set creator
     if (!StringUtils.isEmpty(metadata.getDcCreator())) {
       for (String creator : metadata.getDcCreator().split(";;")) {
-        if (iTunesEntry.getAuthor() == null)
+        if (iTunesEntry.getAuthor() == null) {
           iTunesEntry.setAuthor(creator);
+        }
         entry.addAuthor(new PersonImpl(creator));
         dcExtension.addCreator(creator);
       }
@@ -826,8 +832,9 @@ public abstract class AbstractFeedGenerator implements FeedGenerator {
     }
 
     // Set the updated date
-    if (updatedDate == null)
+    if (updatedDate == null) {
       updatedDate = d;
+    }
     entry.setUpdatedDate(updatedDate);
 
     // TODO: Finish dc support
@@ -930,8 +937,9 @@ public abstract class AbstractFeedGenerator implements FeedGenerator {
    * @return the feed
    */
   protected FeedEntry createEntry(Feed feed, String title, String description, String link, String uri) {
-    if (feed == null)
+    if (feed == null) {
       throw new IllegalStateException("Feed must be created prior to creating feed entries");
+    }
     FeedEntryImpl entry = new FeedEntryImpl(feed, title, description, new LinkImpl(link), uri);
     return entry;
   }
@@ -1276,8 +1284,9 @@ public abstract class AbstractFeedGenerator implements FeedGenerator {
    */
   @Override
   public boolean equals(Object o) {
-    if (!(o instanceof FeedGenerator))
+    if (!(o instanceof FeedGenerator)) {
       return false;
+    }
     FeedGenerator generator = (FeedGenerator) o;
     return getIdentifier().equals(generator.getIdentifier());
   }
@@ -1289,8 +1298,9 @@ public abstract class AbstractFeedGenerator implements FeedGenerator {
    */
   @Override
   public String toString() {
-    if (this.getName() != null)
+    if (this.getName() != null) {
       return getName();
+    }
     return super.toString();
   }
 

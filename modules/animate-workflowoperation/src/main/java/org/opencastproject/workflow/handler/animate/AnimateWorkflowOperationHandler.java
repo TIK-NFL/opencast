@@ -36,8 +36,10 @@ import org.opencastproject.metadata.dublincore.DublinCoreCatalog;
 import org.opencastproject.metadata.dublincore.DublinCoreUtil;
 import org.opencastproject.metadata.dublincore.DublinCoreValue;
 import org.opencastproject.workflow.api.AbstractWorkflowOperationHandler;
+import org.opencastproject.workflow.api.ConfiguredTagsAndFlavors;
 import org.opencastproject.workflow.api.WorkflowInstance;
 import org.opencastproject.workflow.api.WorkflowOperationException;
+import org.opencastproject.workflow.api.WorkflowOperationHandler;
 import org.opencastproject.workflow.api.WorkflowOperationInstance;
 import org.opencastproject.workflow.api.WorkflowOperationResult;
 import org.opencastproject.workspace.api.Workspace;
@@ -45,6 +47,9 @@ import org.opencastproject.workspace.api.Workspace;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.osgi.service.component.ComponentContext;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,6 +67,14 @@ import java.util.UUID;
 /**
  * Workflow operation for the animate service.
  */
+@Component(
+    immediate = true,
+    service = WorkflowOperationHandler.class,
+    property = {
+        "service.description=Animate Workflow Operation Handler",
+        "workflow.operation=animate"
+    }
+)
 public class AnimateWorkflowOperationHandler extends AbstractWorkflowOperationHandler {
   private static final Logger logger = LoggerFactory.getLogger(AnimateWorkflowOperationHandler.class);
 
@@ -80,12 +93,6 @@ public class AnimateWorkflowOperationHandler extends AbstractWorkflowOperationHa
   /** Animation fps configuration property name. */
   private static final String FPS_PROPERTY = "fps";
 
-  /** Target flavor configuration property name. */
-  private static final String TARGET_FLAVOR_PROPERTY = "target-flavor";
-
-  /** Target tags configuration property name. */
-  private static final String TARGET_TAGS_PROPERTY = "target-tags";
-
   /** The animate service. */
   private AnimateService animateService = null;
 
@@ -96,6 +103,7 @@ public class AnimateWorkflowOperationHandler extends AbstractWorkflowOperationHa
   private MediaInspectionService mediaInspectionService;
 
   @Override
+  @Activate
   public void activate(ComponentContext cc) {
     super.activate(cc);
     logger.info("Registering animate workflow operation handler");
@@ -153,16 +161,12 @@ public class AnimateWorkflowOperationHandler extends AbstractWorkflowOperationHa
     }
     URI animation = animationFile.toURI();
 
-    final MediaPackageElementFlavor targetFlavor;
-    try {
-      targetFlavor = MediaPackageElementFlavor.parseFlavor(StringUtils.trimToNull(
-              operation.getConfiguration(TARGET_FLAVOR_PROPERTY)));
-    } catch (IllegalArgumentException e) {
-      throw new WorkflowOperationException("Invalid target flavor", e);
-    }
+    ConfiguredTagsAndFlavors tagsAndFlavors = getTagsAndFlavors(workflowInstance,
+        Configuration.none, Configuration.none, Configuration.many, Configuration.one);
+    final MediaPackageElementFlavor targetFlavor = tagsAndFlavors.getSingleTargetFlavor();
 
     // Get optional options
-    String targetTagsProperty = StringUtils.trimToNull(operation.getConfiguration(TARGET_TAGS_PROPERTY));
+    List<String> targetTagsProperty = tagsAndFlavors.getTargetTags();
 
     // Check if we have custom command line options
     String cmd = operation.getConfiguration(COMMANDLINE_ARGUMENTS_PROPERTY);
@@ -215,7 +219,7 @@ public class AnimateWorkflowOperationHandler extends AbstractWorkflowOperationHa
       track = (TrackImpl) MediaPackageElementParser.getFromXml(inspection.getPayload());
 
       // add track to media package
-      for (String tag : asList(targetTagsProperty)) {
+      for (String tag : targetTagsProperty) {
         track.addTag(tag);
       }
       mediaPackage.add(track);
@@ -234,14 +238,17 @@ public class AnimateWorkflowOperationHandler extends AbstractWorkflowOperationHa
     return createResult(mediaPackage, WorkflowOperationResult.Action.CONTINUE);
   }
 
+  @Reference
   public void setAnimateService(AnimateService animateService) {
     this.animateService = animateService;
   }
 
+  @Reference
   public void setMediaInspectionService(MediaInspectionService mediaInspectionService) {
     this.mediaInspectionService = mediaInspectionService;
   }
 
+  @Reference
   public void setWorkspace(Workspace workspace) {
     this.workspace = workspace;
   }

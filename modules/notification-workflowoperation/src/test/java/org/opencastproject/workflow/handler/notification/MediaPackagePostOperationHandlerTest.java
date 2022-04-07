@@ -46,7 +46,7 @@ public class MediaPackagePostOperationHandlerTest {
 
   /** the logging facility provided by log4j */
   private static final Logger logger
-    = LoggerFactory.getLogger(MediaPackagePostOperationHandlerTest.class.getName());
+      = LoggerFactory.getLogger(MediaPackagePostOperationHandlerTest.class.getName());
 
   /** Represents a tuple of handler and instance, useful for return types */
   private static final class InstanceAndHandler {
@@ -72,9 +72,9 @@ public class MediaPackagePostOperationHandlerTest {
     workflowInstance.setId(1);
     workflowInstance.setState(WorkflowState.RUNNING);
     WorkflowOperationInstanceImpl operation
-      = new WorkflowOperationInstanceImpl("op", OperationState.RUNNING);
+        = new WorkflowOperationInstanceImpl("op", OperationState.RUNNING);
     List<WorkflowOperationInstance> operationsList
-      = new ArrayList<WorkflowOperationInstance>();
+        = new ArrayList<WorkflowOperationInstance>();
     operationsList.add(operation);
     workflowInstance.setOperations(operationsList);
 
@@ -97,7 +97,6 @@ public class MediaPackagePostOperationHandlerTest {
     /* Sending stuff to port 9 shound never return anything as the Discard
      * Protocol uses port 9 */
     InstanceAndHandler tuple = createWorkflow("http://127.0.0.1:9", "xml");
-    MediaPackagePostOperationHandler handler = (MediaPackagePostOperationHandler) tuple.workflowHandler;
     tuple.workflowInstance.setMediaPackage(mp);
 
     try {
@@ -123,7 +122,6 @@ public class MediaPackagePostOperationHandlerTest {
     /* Sending stuff to port 9 shound never return anything as the Discard
      * Protocol uses port 9 */
     InstanceAndHandler tuple = createWorkflow("http://127.0.0.1:9", "json");
-    MediaPackagePostOperationHandler handler = (MediaPackagePostOperationHandler) tuple.workflowHandler;
     tuple.workflowInstance.setMediaPackage(mp);
 
     try {

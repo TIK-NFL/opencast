@@ -25,7 +25,10 @@ import org.opencastproject.mediapackage.MediaPackageBuilder;
 import org.opencastproject.mediapackage.MediaPackageBuilderFactory;
 import org.opencastproject.mediapackage.MediaPackageElement;
 import org.opencastproject.mediapackage.MediaPackageParser;
+import org.opencastproject.security.api.DefaultOrganization;
+import org.opencastproject.security.api.SecurityService;
 import org.opencastproject.serviceregistry.api.ServiceRegistry;
+import org.opencastproject.util.FileSupport;
 import org.opencastproject.workspace.api.Workspace;
 
 import com.amazonaws.AmazonServiceException;
@@ -36,7 +39,9 @@ import com.amazonaws.services.s3.transfer.TransferManager;
 import com.amazonaws.services.s3.transfer.Upload;
 import com.google.gson.Gson;
 
+import org.apache.commons.io.FileUtils;
 import org.easymock.EasyMock;
+import org.easymock.IAnswer;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -44,6 +49,8 @@ import org.junit.Test;
 
 import java.io.File;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -63,6 +70,8 @@ public class AwsS3DistributionServiceImplTest {
 
   private MediaPackage mp = null;
   private MediaPackage distributedMp = null;
+  private File storageDir = null;
+  private DefaultOrganization defaultOrganization;
 
   @Before
   public void setUp() throws Exception {
@@ -70,12 +79,32 @@ public class AwsS3DistributionServiceImplTest {
     s3 = EasyMock.createNiceMock(AmazonS3Client.class);
     tm = EasyMock.createNiceMock(TransferManager.class);
     // Replay will be called in each test
+    File baseDir = FileSupport.getTempDirectory("s3distribution");
+    File srcFile = new File(baseDir, "presenter-m3u8/video-presenter-delivery.m3u8");
+    FileUtils.copyURLToFile(this.getClass().getResource("/video-presenter-delivery.m3u8"), srcFile);
+    srcFile = new File(baseDir, "presenter-mp4/video-presenter-delivery.mp4");
+    FileUtils.copyURLToFile(this.getClass().getResource("/video-presenter-delivery.mp4"), srcFile);
+    srcFile = new File(baseDir, "video-presenter-delivery.mp4");
+    FileUtils.copyURLToFile(this.getClass().getResource("/video-presenter-delivery.mp4"), srcFile);
 
     workspace = EasyMock.createNiceMock(Workspace.class);
-    EasyMock.expect(workspace.get(EasyMock.anyObject(URI.class))).andReturn(new File("test"));
+    EasyMock.expect(workspace.get((URI) EasyMock.anyObject())).andAnswer(new IAnswer<File>() {
+      @Override
+      public File answer() throws Throwable {
+        String name;
+        URI uri = (URI) EasyMock.getCurrentArguments()[0];
+        name = uri.getPath();
+        return new File(baseDir, name);
+      }
+    }).anyTimes();
     EasyMock.replay(workspace);
 
     serviceRegistry = EasyMock.createNiceMock(ServiceRegistry.class);
+
+    defaultOrganization = new DefaultOrganization();
+    SecurityService securityService = EasyMock.createNiceMock(SecurityService.class);
+    EasyMock.expect(securityService.getOrganization()).andReturn(defaultOrganization).anyTimes();
+    EasyMock.replay(securityService);
 
     service = new AwsS3DistributionServiceImpl();
     service.setServiceRegistry(serviceRegistry);
@@ -83,9 +112,12 @@ public class AwsS3DistributionServiceImplTest {
     service.setOpencastDistributionUrl(DOWNLOAD_URL);
     service.setS3(s3);
     service.setS3TransferManager(tm);
+    service.setStorageTmp(baseDir.getAbsolutePath());
     service.setWorkspace(workspace);
+    service.setSecurityService(securityService);
 
     MediaPackageBuilder builder = MediaPackageBuilderFactory.newInstance().newMediaPackageBuilder();
+    storageDir = new File(baseDir.getAbsolutePath() + AwsS3DistributionServiceImpl.DEFAULT_TEMP_DIR);
 
     URI mpURI = AwsS3DistributionServiceImpl.class.getResource("/mediapackage.xml").toURI();
     mp = builder.loadFromXml(mpURI.toURL().openStream());
@@ -216,14 +248,16 @@ public class AwsS3DistributionServiceImplTest {
     MediaPackageElement mpe = mpes[0];
 
     Assert.assertEquals(new URI(
-                    "http://XYZ.cloudfront.net/channelId/efd6e4df-63b6-49af-be5f-15f598778877/presenter-delivery/video-presenter-delivery.mp4"),
-            mpe.getURI());
+        "http://XYZ.cloudfront.net/" + defaultOrganization.getId() + "/channelId/efd6e4df-63b6-49af-be5f-15f598778877/"
+            + "presenter-delivery/video-presenter-delivery.mp4"),
+        mpe.getURI());
   }
 
   @Test
   public void testRetractElements() throws Exception {
     s3.deleteObject(BUCKET_NAME,
-            "channelId/efd6e4df-63b6-49af-be5f-15f598778877/presenter-delivery/video-presenter-delivery.mp4");
+        defaultOrganization.getId()
+            + "/channelId/efd6e4df-63b6-49af-be5f-15f598778877/presenter-delivery/video-presenter-delivery.mp4");
     EasyMock.expectLastCall().once();
     EasyMock.replay(s3);
 
@@ -235,25 +269,61 @@ public class AwsS3DistributionServiceImplTest {
   }
 
   @Test
+  public void testDistributeHLSElement() throws Exception {
+    MediaPackageBuilder builder = MediaPackageBuilderFactory.newInstance().newMediaPackageBuilder();
+
+    URI mpURI = AwsS3DistributionServiceImpl.class.getResource("/hls_mediapackage.xml").toURI();
+    mp = builder.loadFromXml(mpURI.toURL().openStream());
+
+    mpURI = AwsS3DistributionServiceImpl.class.getResource("/distributed_hls_mediapackage.xml").toURI();
+    distributedMp = builder.loadFromXml(mpURI.toURL().openStream());
+    Upload upload = EasyMock.createNiceMock(Upload.class);
+    EasyMock.expect(tm.upload(EasyMock.anyObject(String.class), EasyMock.anyObject(String.class),
+            EasyMock.anyObject(File.class))).andReturn(upload).anyTimes();
+    EasyMock.replay(upload, tm);
+
+    Set<String> mpeIds = new LinkedHashSet<String>();
+    mpeIds.add("presenter-mp4");
+    mpeIds.add("presenter-m3u8");
+
+    MediaPackageElement[] mpes = service.distributeElements("channelId", mp, mpeIds, false);
+    MediaPackageElement mpe = mpes[0];
+
+    Assert.assertEquals(new URI(
+        "http://XYZ.cloudfront.net/"
+            + defaultOrganization.getId()
+            + "/channelId/efd6e4df-63b6-49af-be5f-15f598778877/"
+            + "presenter-mp4/video-presenter-delivery.mp4"),
+        mpe.getURI());
+    // Test that temp directory is removed
+    Path tempfile = storageDir.toPath().resolve(mp.getIdentifier().toString());
+    Assert.assertFalse(Files.exists(tempfile));
+  }
+
+  @Test
   public void testBuildObjectName() {
     MediaPackageElement element = mp.getElementById("presenter-delivery");
     Assert.assertEquals(
-            "channelId/efd6e4df-63b6-49af-be5f-15f598778877/presenter-delivery/video-presenter-delivery.mp4",
+        defaultOrganization.getId()
+            + "/channelId/efd6e4df-63b6-49af-be5f-15f598778877/presenter-delivery/video-presenter-delivery.mp4",
             service.buildObjectName("channelId", mp.getIdentifier().toString(), element));
   }
 
   @Test
   public void testGetDistributionUri() throws Exception {
     Assert.assertEquals(new URI(
-                    "http://XYZ.cloudfront.net/channelId/efd6e4df-63b6-49af-be5f-15f598778877/presenter-delivery/video-presenter-delivery.mp4"),
-            service.getDistributionUri("channelId/efd6e4df-63b6-49af-be5f-15f598778877/presenter-delivery/video-presenter-delivery.mp4"));
+        "http://XYZ.cloudfront.net/" + defaultOrganization.getId() + "/channelId/efd6e4df-63b6-49af-be5f-15f598778877/"
+            + "presenter-delivery/video-presenter-delivery.mp4"),
+        service.getDistributionUri(defaultOrganization.getId() + "/channelId/efd6e4df-63b6-49af-be5f-15f598778877/"
+            + "presenter-delivery/video-presenter-delivery.mp4"));
   }
 
   @Test
   public void testGetDistributedObjectName() {
     MediaPackageElement element = distributedMp.getElementById("presenter-delivery-distributed");
     Assert.assertEquals(
-            "channelId/efd6e4df-63b6-49af-be5f-15f598778877/presenter-delivery/video-presenter-delivery.mp4",
+        defaultOrganization.getId()
+            + "/channelId/efd6e4df-63b6-49af-be5f-15f598778877/presenter-delivery/video-presenter-delivery.mp4",
             service.getDistributedObjectName(element));
   }
 

@@ -1,7 +1,7 @@
 Opencast Infrastructure
 =======================
 
-List of Opencast project infrastructure and administrators.  For detailed notes go [here](notes.md)
+List of Opencast project infrastructure and administrators.
 
 Infrastructure
 --------------
@@ -101,6 +101,8 @@ Other services and the primary contact for them:
 
 - Google
     - Greg Logan
+- YouTube
+    - Greg Logan and ETH Staff
 - Twitter
     - Lars Kiesow
 - Facebook

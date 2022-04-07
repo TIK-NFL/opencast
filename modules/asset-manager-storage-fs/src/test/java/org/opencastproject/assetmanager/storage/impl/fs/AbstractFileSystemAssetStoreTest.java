@@ -25,10 +25,10 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import org.opencastproject.assetmanager.api.storage.DeletionSelector;
+import org.opencastproject.assetmanager.api.storage.Source;
+import org.opencastproject.assetmanager.api.storage.StoragePath;
 import org.opencastproject.assetmanager.impl.VersionImpl;
-import org.opencastproject.assetmanager.impl.storage.DeletionSelector;
-import org.opencastproject.assetmanager.impl.storage.Source;
-import org.opencastproject.assetmanager.impl.storage.StoragePath;
 import org.opencastproject.util.IoSupport;
 import org.opencastproject.util.PathSupport;
 import org.opencastproject.workspace.api.Workspace;
@@ -51,8 +51,6 @@ import java.io.InputStream;
 
 public class AbstractFileSystemAssetStoreTest {
   private static final String XML_EXTENSTION = ".xml";
-
-  private static final String TEST_ROOT_DIR_NAME = "test-archive";
 
   private static final String ORG_ID = "sampleOrgId";
 
@@ -81,10 +79,10 @@ public class AbstractFileSystemAssetStoreTest {
     final Workspace workspace = EasyMock.createNiceMock(Workspace.class);
     EasyMock.expect(workspace.get(EasyMock.anyObject())).andReturn(asset);
     EasyMock.expect(workspace.get(EasyMock.anyObject(), EasyMock.anyBoolean())).andAnswer(() -> {
-        File tmp = tmpFolder.newFile();
-        FileUtils.copyFile(asset, tmp);
-        return tmp;
-      }).anyTimes();
+      File tmp = tmpFolder.newFile();
+      FileUtils.copyFile(asset, tmp);
+      return tmp;
+    }).anyTimes();
     EasyMock.replay(workspace);
 
     tmpRoot = tmpFolder.newFolder();
@@ -140,10 +138,12 @@ public class AbstractFileSystemAssetStoreTest {
     StoragePath to = new StoragePath(ORG_ID, MP_ID, VERSION_1, MP_ELEM_ID);
     assertTrue(repo.copy(from, to));
 
-    File srcFile = new File(PathSupport.concat(new String[] { tmpRoot.toString(), ORG_ID, MP_ID, VERSION_2.toString(),
-            MP_ELEM_ID + XML_EXTENSTION }));
-    File copyFile = new File(PathSupport.concat(new String[] { tmpRoot.toString(), ORG_ID, MP_ID, VERSION_1.toString(),
-            MP_ELEM_ID + XML_EXTENSTION }));
+    File srcFile = new File(PathSupport.concat(new String[] {
+        tmpRoot.toString(), ORG_ID, MP_ID, VERSION_2.toString(), MP_ELEM_ID + XML_EXTENSTION
+    }));
+    File copyFile = new File(PathSupport.concat(new String[] {
+        tmpRoot.toString(), ORG_ID, MP_ID, VERSION_1.toString(), MP_ELEM_ID + XML_EXTENSTION
+    }));
     assertTrue(srcFile.exists());
     assertTrue(copyFile.exists());
 

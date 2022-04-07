@@ -27,6 +27,7 @@ import static org.opencastproject.util.data.Option.option;
 import static org.opencastproject.util.data.functions.Strings.toBool;
 import static org.opencastproject.util.data.functions.Strings.trimToNone;
 
+import org.opencastproject.distribution.api.StreamingDistributionService;
 import org.opencastproject.job.api.Job;
 import org.opencastproject.job.api.JobContext;
 import org.opencastproject.mediapackage.MediaPackage;
@@ -68,8 +69,6 @@ public class PublishOaiPmhWorkflowOperationHandler extends AbstractWorkflowOpera
   /** The logging facility */
   private static final Logger logger = LoggerFactory.getLogger(PublishOaiPmhWorkflowOperationHandler.class);
 
-  private static final String STREAMING_URL_PROPERTY = "org.opencastproject.streaming.url";
-
   /** Workflow configuration option keys */
   private static final String DOWNLOAD_FLAVORS = "download-flavors";
   private static final String DOWNLOAD_TAGS = "download-tags";
@@ -84,7 +83,8 @@ public class PublishOaiPmhWorkflowOperationHandler extends AbstractWorkflowOpera
   /** The publication service */
   private OaiPmhPublicationService publicationService = null;
 
-  private boolean distributeStreaming = false;
+  /** The streaming distribution service */
+  private StreamingDistributionService streamingDistributionService = null;
 
   /**
    * Callback for the OSGi declarative services configuration.
@@ -96,19 +96,21 @@ public class PublishOaiPmhWorkflowOperationHandler extends AbstractWorkflowOpera
     this.publicationService = publicationService;
   }
 
+  /**
+   * Callback for the OSGi declarative services configuration.
+   *
+   * @param streamingDistributionService
+   *          the streaming distribution service
+   */
+  protected void setStreamingDistributionService(StreamingDistributionService streamingDistributionService) {
+    this.streamingDistributionService = streamingDistributionService;
+  }
+
   /** OSGi component activation. */
   @Override
   public void activate(ComponentContext cc) {
-    if (StringUtils.isNotBlank(cc.getBundleContext().getProperty(STREAMING_URL_PROPERTY)))
-      distributeStreaming = true;
   }
 
-  /**
-   * {@inheritDoc}
-   *
-   * @see org.opencastproject.workflow.api.WorkflowOperationHandler#start(org.opencastproject.workflow.api.WorkflowInstance,
-   *      JobContext)
-   */
   @Override
   public WorkflowOperationResult start(final WorkflowInstance workflowInstance, JobContext context)
           throws WorkflowOperationException {
@@ -134,8 +136,9 @@ public class PublishOaiPmhWorkflowOperationHandler extends AbstractWorkflowOpera
     Opt<MimeType> externalMimetype = getOptConfig(workflowInstance.getCurrentOperation(), EXTERNAL_MIME_TYPE)
             .bind(MimeTypes.toMimeType);
 
-    if (repository == null)
+    if (repository == null) {
       throw new IllegalArgumentException("No repository has been specified");
+    }
 
     String[] sourceDownloadTags = StringUtils.split(downloadTags, ",");
     String[] sourceDownloadFlavors = StringUtils.split(downloadFlavors, ",");
@@ -158,7 +161,7 @@ public class PublishOaiPmhWorkflowOperationHandler extends AbstractWorkflowOpera
     final Collection<MediaPackageElement> downloadElements = downloadElementSelector.select(mediaPackage, false);
 
     final Collection<MediaPackageElement> streamingElements;
-    if (distributeStreaming) {
+    if (streamingDistributionService != null && streamingDistributionService.publishToStreaming()) {
       final SimpleElementSelector streamingElementSelector = new SimpleElementSelector();
       for (String flavor : sourceStreamingFlavors) {
         streamingElementSelector.addFlavor(MediaPackageElementFlavor.parseFlavor(flavor));
@@ -194,9 +197,10 @@ public class PublishOaiPmhWorkflowOperationHandler extends AbstractWorkflowOpera
       }
 
       // Wait until the publication job has returned
-      if (!waitForStatus(publishJob).isSuccess())
+      if (!waitForStatus(publishJob).isSuccess()) {
         throw new WorkflowOperationException("Mediapackage " + mediaPackage.getIdentifier()
                 + " could not be published to OAI-PMH repository " + repository);
+      }
 
       // The job has passed
       Job job = serviceRegistry.getJob(publishJob.getId());
@@ -216,8 +220,9 @@ public class PublishOaiPmhWorkflowOperationHandler extends AbstractWorkflowOpera
 
       if (newElement == null) {
         logger.warn(
-                "Publication to OAI-PMH repository '{}' failed, unable to parse the payload '{}' from job '{}' to a mediapackage element",
-                repository, job.getPayload(), job.toString());
+            "Publication to OAI-PMH repository '{}' failed, unable to parse the payload '{}' from "
+                + "job '{}' to a mediapackage element",
+            repository, job.getPayload(), job.toString());
         return createResult(mediaPackage, Action.CONTINUE);
       }
 
@@ -228,9 +233,10 @@ public class PublishOaiPmhWorkflowOperationHandler extends AbstractWorkflowOpera
       mediaPackage.add(newElement);
 
       if (externalChannel.isSome() && externalMimetype.isSome() && externalTempalte.isSome()) {
-        String template = externalTempalte.get().replace("{event}", mediaPackage.getIdentifier().compact());
-        if (StringUtils.isNotBlank(mediaPackage.getSeries()))
+        String template = externalTempalte.get().replace("{event}", mediaPackage.getIdentifier().toString());
+        if (StringUtils.isNotBlank(mediaPackage.getSeries())) {
           template = template.replace("{series}", mediaPackage.getSeries());
+        }
 
         Publication externalElement = PublicationImpl.publication(UUID.randomUUID().toString(), externalChannel.get(),
                 URI.create(template), externalMimetype.get());

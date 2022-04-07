@@ -27,6 +27,9 @@ import org.opencastproject.util.doc.rest.RestQuery;
 import org.opencastproject.util.doc.rest.RestResponse;
 import org.opencastproject.util.doc.rest.RestService;
 
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,51 +42,83 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
 @Path("/")
-@RestService(name = "EngagePluginManager", title = "Engage Plugin Manager Service",
-        abstractText = "REST endpoint for the service that manages plugins for the Engage Player.",
-        notes = {
-            "All paths above are relative to the REST endpoint base (something like http://your.server/engage/plugins/manager)",
-            "If the service is down or not working it will return a status 503, this means the the underlying service is "
-            + "not working and is either restarting or has failed",
-            "A status code 500 means a general failure has occurred which is not recoverable and was not anticipated. In "
-            + "other words, there is a bug! You should file an error report with your server logs from the time when the "
-            + "error occurred: <a href=\"https://github.com/opencast/opencast/issues\">Opencast Issue Tracker</a>"})
+@RestService(
+    name = "EngagePluginManager",
+    title = "Engage Plugin Manager Service",
+    abstractText = "REST endpoint for the service that manages plugins for the Engage Player.",
+    notes = {
+        "All paths above are relative to the REST endpoint base "
+            + "(something like http://your.server/engage/plugins/manager)",
+        "If the service is down or not working it will return a status 503, this means the the "
+            + "underlying service is not working and is either restarting or has failed",
+        "A status code 500 means a general failure has occurred which is not recoverable and was "
+            + "not anticipated. In other words, there is a bug! You should file an error report "
+            + "with your server logs from the time when the error occurred: "
+            + "<a href=\"https://github.com/opencast/opencast/issues\">Opencast Issue Tracker</a>"
+    }
+)
+@Component(
+    property = {
+        "service.description=Engage Plugin Manager REST Endpoint",
+        "opencast.service.type=org.opencastproject.engage.plugin.manager",
+        "opencast.service.path=/engage/theodul/manager"
+    },
+    immediate = true,
+    service = EngagePluginManagerRestService.class
+)
 public class EngagePluginManagerRestService {
 
-    private static final Logger log = LoggerFactory.getLogger(EngagePluginManagerRestService.class);
-    private EngagePluginManager manager;
+  private static final Logger log = LoggerFactory.getLogger(EngagePluginManagerRestService.class);
+  private EngagePluginManager manager;
 
-    protected void setPluginManager(EngagePluginManager manager) {
-        this.manager = manager;
-    }
+  @Reference
+  protected void setPluginManager(EngagePluginManager manager) {
+    this.manager = manager;
+  }
 
-    protected void activate() {
-        log.info("Activated.");
-    }
+  @Activate
+  protected void activate() {
+    log.info("Activated.");
+  }
 
-    @GET
+  @GET
     @Produces({MediaType.TEXT_XML, MediaType.APPLICATION_JSON})
     @Path("list.{format:xml|json}")
-    @RestQuery(name = "plugins", description = "Returns the list of all registered Engage Player plugins.",
-            pathParameters = {
-                @RestParameter(description = "The output format (json or xml) of the response body.", isRequired = true, name = "format", type = RestParameter.Type.STRING)
-            },
-            reponses = {
-                @RestResponse(description = "the list of plugins was successfully retrieved.", responseCode = HttpServletResponse.SC_OK),
-                @RestResponse(description = "something went wrong.", responseCode = HttpServletResponse.SC_INTERNAL_SERVER_ERROR)
-            }, returnDescription = "The list of all registered plugins.")
+    @RestQuery(
+        name = "plugins",
+        description = "Returns the list of all registered Engage Player plugins.",
+        pathParameters = {
+            @RestParameter(
+                name = "format",
+                isRequired = true,
+                type = RestParameter.Type.STRING,
+                description = "The output format (json or xml) of the response body."
+            )
+        },
+        responses = {
+            @RestResponse(
+                description = "the list of plugins was successfully retrieved.",
+                responseCode = HttpServletResponse.SC_OK
+            ),
+            @RestResponse(
+                description = "something went wrong.",
+                responseCode = HttpServletResponse.SC_INTERNAL_SERVER_ERROR
+            )
+        },
+        returnDescription = "The list of all registered plugins."
+    )
     public Response listPlugins(@PathParam("format") String format) {
-        try {
-            EngagePluginRegistrationList plugins = new EngagePluginRegistrationList(manager.getAllRegisteredPlugins());
+    try {
+      EngagePluginRegistrationList plugins = new EngagePluginRegistrationList(manager.getAllRegisteredPlugins());
 
-            final String type = "json".equals(format) ? MediaType.APPLICATION_JSON : MediaType.APPLICATION_XML;
+      final String type = "json".equals(format) ? MediaType.APPLICATION_JSON : MediaType.APPLICATION_XML;
 
-            return Response.ok().entity(plugins).type(type).build();
-        } catch (Exception e) {
-            log.error(e.getMessage(), e);
-            return Response.serverError().entity(buildUnexpectedErrorMessage(e)).build();
-        }
+      return Response.ok().entity(plugins).type(type).build();
+    } catch (Exception e) {
+      log.error(e.getMessage(), e);
+      return Response.serverError().entity(buildUnexpectedErrorMessage(e)).build();
     }
+  }
 
     /**
      * Builds an error message in case of an unexpected error in an endpoint
@@ -92,13 +127,13 @@ public class EngagePluginManagerRestService {
      * @param e Exception that was thrown
      * @return error message
      */
-    private String buildUnexpectedErrorMessage(Exception e) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("Unexpected error (").append(e.getClass().getName()).append(")");
-        String message = e.getMessage();
-        if (message != null && message.length() > 0) {
-            sb.append(": ").append(message);
-        }
-        return sb.toString();
+  private String buildUnexpectedErrorMessage(Exception e) {
+    StringBuilder sb = new StringBuilder();
+    sb.append("Unexpected error (").append(e.getClass().getName()).append(")");
+    String message = e.getMessage();
+    if (message != null && message.length() > 0) {
+      sb.append(": ").append(message);
     }
+    return sb.toString();
+  }
 }

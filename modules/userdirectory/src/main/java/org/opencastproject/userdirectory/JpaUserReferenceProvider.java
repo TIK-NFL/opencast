@@ -21,6 +21,7 @@
 
 package org.opencastproject.userdirectory;
 
+import org.opencastproject.security.api.Group;
 import org.opencastproject.security.api.Role;
 import org.opencastproject.security.api.RoleProvider;
 import org.opencastproject.security.api.SecurityService;
@@ -29,13 +30,18 @@ import org.opencastproject.security.api.UserProvider;
 import org.opencastproject.security.impl.jpa.JpaOrganization;
 import org.opencastproject.security.impl.jpa.JpaRole;
 import org.opencastproject.security.impl.jpa.JpaUserReference;
+import org.opencastproject.userdirectory.api.AAIRoleProvider;
 import org.opencastproject.userdirectory.api.UserReferenceProvider;
+import org.opencastproject.util.NotFoundException;
 
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 
 import org.osgi.service.component.ComponentContext;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,6 +63,13 @@ import javax.persistence.Query;
 /**
  * Manages and locates users references using JPA.
  */
+@Component(
+    property = {
+        "service.description=Provides a user reference directory"
+    },
+    immediate = true,
+    service = { UserProvider.class, RoleProvider.class, UserReferenceProvider.class }
+)
 public class JpaUserReferenceProvider implements UserReferenceProvider, UserProvider, RoleProvider {
 
   /** The logger */
@@ -76,6 +89,12 @@ public class JpaUserReferenceProvider implements UserReferenceProvider, UserProv
   /** The security service */
   protected SecurityService securityService = null;
 
+  /** Group Role provider */
+  protected JpaGroupRoleProvider groupRoleProvider;
+
+  /** Role provider */
+  protected AAIRoleProvider roleProvider;
+
   /** The delimiter for the User cache */
   private static final String DELIMITER = ";==;";
 
@@ -89,6 +108,7 @@ public class JpaUserReferenceProvider implements UserReferenceProvider, UserProv
   protected EntityManagerFactory emf = null;
 
   /** OSGi DI */
+  @Reference(name = "entityManagerFactory", target = "(osgi.unit.name=org.opencastproject.common)")
   void setEntityManagerFactory(EntityManagerFactory emf) {
     this.emf = emf;
   }
@@ -97,8 +117,18 @@ public class JpaUserReferenceProvider implements UserReferenceProvider, UserProv
    * @param securityService
    *          the securityService to set
    */
+  @Reference(name = "security-service")
   public void setSecurityService(SecurityService securityService) {
     this.securityService = securityService;
+  }
+
+  /**
+   * @param groupRoleProvider
+   *          the GroupRoleProvider to set
+   */
+  @Reference(name = "groupRoleProvider")
+  public void setGroupRoleProvider(JpaGroupRoleProvider groupRoleProvider) {
+    this.groupRoleProvider = groupRoleProvider;
   }
 
   /**
@@ -107,6 +137,7 @@ public class JpaUserReferenceProvider implements UserReferenceProvider, UserProv
    * @param cc
    *          the component context
    */
+  @Activate
   public void activate(ComponentContext cc) {
     logger.debug("activate");
 
@@ -146,10 +177,15 @@ public class JpaUserReferenceProvider implements UserReferenceProvider, UserProv
    */
   @Override
   public List<Role> getRolesForUser(String userName) {
+    if (roleProvider != null) {
+      return roleProvider.getRolesForUser(userName);
+    }
+
     ArrayList<Role> roles = new ArrayList<Role>();
     User user = loadUser(userName);
-    if (user != null)
+    if (user != null) {
       roles.addAll(user.getRoles());
+    }
     return roles;
   }
 
@@ -160,8 +196,9 @@ public class JpaUserReferenceProvider implements UserReferenceProvider, UserProv
    */
   @Override
   public Iterator<User> findUsers(String query, int offset, int limit) {
-    if (query == null)
+    if (query == null) {
       throw new IllegalArgumentException("Query must be set");
+    }
     String orgId = securityService.getOrganization().getId();
     List<User> users = new ArrayList<User>();
     for (JpaUserReference userRef : findUserReferencesByQuery(orgId, query, limit, offset, emf)) {
@@ -188,8 +225,10 @@ public class JpaUserReferenceProvider implements UserReferenceProvider, UserProv
    */
   @Override
   public Iterator<Role> findRoles(String query, Role.Target target, int offset, int limit) {
-    // The roles are returned from the JpaUserAndRoleProvider
-    return Collections.<Role> emptyList().iterator();
+    if (roleProvider == null) {
+      return Collections.<Role> emptyList().iterator();
+    }
+    return roleProvider.findRoles(query, target, offset, limit);
   }
 
   /**
@@ -219,8 +258,9 @@ public class JpaUserReferenceProvider implements UserReferenceProvider, UserProv
    */
   private User loadUser(String userName, String organization) {
     JpaUserReference userReference = findUserReference(userName, organization, emf);
-    if (userReference != null)
+    if (userReference != null) {
       return userReference.toUser(PROVIDER_NAME);
+    }
     return null;
   }
 
@@ -232,6 +272,18 @@ public class JpaUserReferenceProvider implements UserReferenceProvider, UserProv
       users.add(userRef.toUser(PROVIDER_NAME));
     }
     return users.iterator();
+  }
+
+  /**
+   * Return the roles
+   *
+   * @return the roles
+   */
+  public Iterator<Role> getRoles() {
+    if (roleProvider == null) {
+      return Collections.<Role> emptyList().iterator();
+    }
+    return roleProvider.getRoles();
   }
 
   /**
@@ -274,9 +326,11 @@ public class JpaUserReferenceProvider implements UserReferenceProvider, UserProv
       if (tx.isActive()) {
         tx.rollback();
       }
-      if (em != null)
+      if (em != null) {
         em.close();
+      }
     }
+    updateGroupMembership(user);
   }
 
   /**
@@ -305,9 +359,38 @@ public class JpaUserReferenceProvider implements UserReferenceProvider, UserProv
       if (tx.isActive()) {
         tx.rollback();
       }
-      if (em != null)
+      if (em != null) {
         em.close();
+      }
     }
+    updateGroupMembership(user);
+  }
+
+  /**
+   * Updates a user's groups based on assigned roles
+   *
+   * @param user
+   *          the user for whom groups should be updated
+   * @throws NotFoundException
+   */
+  private void updateGroupMembership(JpaUserReference user) {
+
+    logger.debug("updateGroupMembership({}, roles={})", user.getUsername(), user.getRoles().size());
+
+    List<String> internalGroupRoles = new ArrayList<String>();
+
+    for (Role role : user.getRoles()) {
+      if (Role.Type.GROUP.equals(role.getType())
+          || (Role.Type.INTERNAL.equals(role.getType()) && role.getName().startsWith(Group.ROLE_PREFIX))) {
+        internalGroupRoles.add(role.getName());
+      }
+    }
+
+    groupRoleProvider.updateGroupMembershipFromRoles(
+        user.getUsername(),
+        user.getOrganization().getId(),
+        internalGroupRoles
+    );
   }
 
   /**
@@ -345,8 +428,9 @@ public class JpaUserReferenceProvider implements UserReferenceProvider, UserProv
     } catch (NoResultException e) {
       return null;
     } finally {
-      if (em != null)
+      if (em != null) {
         em.close();
+      }
     }
   }
 
@@ -377,8 +461,9 @@ public class JpaUserReferenceProvider implements UserReferenceProvider, UserProv
       q.setParameter("org", orgId);
       return q.getResultList();
     } finally {
-      if (em != null)
+      if (em != null) {
         em.close();
+      }
     }
   }
 
@@ -401,8 +486,9 @@ public class JpaUserReferenceProvider implements UserReferenceProvider, UserProv
       q.setParameter("names", names);
       return q.getResultList();
     } finally {
-      if (em != null)
+      if (em != null) {
         em.close();
+      }
     }
   }
 
@@ -428,8 +514,9 @@ public class JpaUserReferenceProvider implements UserReferenceProvider, UserProv
       q.setParameter("org", orgId);
       return q.getResultList();
     } finally {
-      if (em != null)
+      if (em != null) {
         em.close();
+      }
     }
   }
 
@@ -443,8 +530,9 @@ public class JpaUserReferenceProvider implements UserReferenceProvider, UserProv
       q.setParameter("org", orgId);
       return ((Number) q.getSingleResult()).longValue();
     } finally {
-      if (em != null)
+      if (em != null) {
         em.close();
+      }
     }
   }
 
@@ -452,6 +540,10 @@ public class JpaUserReferenceProvider implements UserReferenceProvider, UserProv
   public void invalidate(String userName) {
     String orgId = securityService.getOrganization().getId();
     cache.invalidate(userName.concat(DELIMITER).concat(orgId));
+  }
+
+  public void setRoleProvider(RoleProvider roleProvider) {
+    this.roleProvider = (AAIRoleProvider) roleProvider;
   }
 
 }

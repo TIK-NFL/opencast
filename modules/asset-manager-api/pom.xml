@@ -7,7 +7,7 @@
   <parent>
     <groupId>org.opencastproject</groupId>
     <artifactId>base</artifactId>
-    <version>8-SNAPSHOT</version>
+    <version>11-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
   <properties>
@@ -22,10 +22,6 @@
     <dependency>
       <groupId>com.google.code.findbugs</groupId>
       <artifactId>jsr305</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.hamcrest</groupId>
-      <artifactId>hamcrest-library</artifactId>
     </dependency>
     <dependency>
       <groupId>org.opencastproject</groupId>
@@ -50,6 +46,11 @@
       <version>1.0.4</version>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.hamcrest</groupId>
+      <artifactId>hamcrest</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
   <build>
     <plugins>
@@ -68,7 +69,8 @@
             <Export-Package>
               org.opencastproject.assetmanager.api;version=${project.version},
               org.opencastproject.assetmanager.api.fn;version=${project.version},
-              org.opencastproject.assetmanager.api.query;version=${project.version}
+              org.opencastproject.assetmanager.api.query;version=${project.version},
+              org.opencastproject.assetmanager.api.storage;version=${project.version}
             </Export-Package>
             <Private-Package>
               javax.annotation*

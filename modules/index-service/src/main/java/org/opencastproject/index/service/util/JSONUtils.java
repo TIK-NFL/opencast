@@ -26,12 +26,11 @@ import static com.entwinemedia.fn.data.json.Jsons.f;
 import static com.entwinemedia.fn.data.json.Jsons.obj;
 import static com.entwinemedia.fn.data.json.Jsons.v;
 
-import org.opencastproject.index.service.exception.ListProviderException;
-import org.opencastproject.index.service.resources.list.api.ListProvidersService;
-import org.opencastproject.index.service.resources.list.api.ResourceListFilter;
-import org.opencastproject.index.service.resources.list.api.ResourceListQuery;
+import org.opencastproject.list.api.ListProviderException;
+import org.opencastproject.list.api.ListProvidersService;
+import org.opencastproject.list.api.ResourceListFilter;
+import org.opencastproject.list.api.ResourceListQuery;
 import org.opencastproject.security.api.Organization;
-import org.opencastproject.util.DateTimeSupport;
 import org.opencastproject.util.data.Option;
 
 import com.entwinemedia.fn.data.json.Field;
@@ -39,13 +38,12 @@ import com.entwinemedia.fn.data.json.JObject;
 import com.entwinemedia.fn.data.json.JValue;
 import com.entwinemedia.fn.data.json.Jsons;
 
-import org.apache.commons.lang3.StringUtils;
 import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -58,7 +56,11 @@ import java.util.Set;
  */
 public final class JSONUtils {
 
-  public static final String PATTERN_ISO_DATE = "yyyy-MM-dd'T'HH:mm:ss'Z'";
+  /** This regex is used to reduce the users in the filter selectbox.
+   * The filter is located in the top right corner in the admin ui. */
+  private static String userFilterRegex;
+  private static final String[] userListsToReduce = {"CONTRIBUTORS", "PUBLISHER",
+          "ORGANIZERS", "CONTRIBUTORS.USERNAMES", "EVENTS.PUBLISHER", "USERS.NAME"};
 
   private JSONUtils() {
 
@@ -102,45 +104,6 @@ public final class JSONUtils {
   }
 
   /**
-   * Create a JSON Array with the list given as String containing values separated by the given separator;
-   *
-   * @param list
-   *          The list of values as String
-   * @param separator
-   *          The separator used in the list between each value
-   * @return a JSON Array as {@link JValue}
-   * @throws IllegalArgumentException
-   *           - if the separator is not set
-   */
-  public static JValue jsonArrayFromString(String list, String separator) {
-    if (StringUtils.isEmpty(separator))
-      throw new IllegalArgumentException("The separator must be defined!");
-
-    if (StringUtils.isBlank(list))
-      return arr();
-
-    List<JValue> values = new ArrayList<JValue>();
-    for (String value : list.split(separator))
-      values.add(v(value));
-
-    return arr(values);
-  }
-
-  /**
-   * Format the given Date as ISO String Date using the pattern "yyyy-MM-dd'T'HH:mm:ss'Z'".
-   *
-   * @param date
-   *          The date to format
-   * @return The date as ISO Date String
-   * @throws IllegalArgumentException
-   */
-  public static String formatIsoDate(Date date) {
-    if (date == null)
-      throw new IllegalArgumentException("The given date must not be null.");
-    return DateTimeSupport.toUTC(date.getTime());
-  }
-
-  /**
    * Generate JSON presentation of the given filters
    *
    * @param query
@@ -177,6 +140,10 @@ public final class JSONUtils {
           values = new HashMap<String, String>();
         } else {
           values = listProvidersService.getList(listProviderName.get(), query, false);
+          if (Arrays.asList(userListsToReduce).contains(listProviderName.get())) {
+            // reduces the user list ('values' map) by the configured userFilterRegex
+            values.keySet().removeIf(u -> !u.matches(userFilterRegex));
+          }
           translatable = listProvidersService.isTranslatable(listProviderName.get());
         }
 
@@ -202,8 +169,6 @@ public final class JSONUtils {
    *          The {@link ResourceListQuery}
    * @param listProvidersService
    *          The {@link ListProvidersService} to get the possible values
-   * @param org
-   *          The {@link Organization}
    * @param series
    *          The Series with write access
    * @return
@@ -211,14 +176,11 @@ public final class JSONUtils {
    *           if the possible values can not be retrieved correctly from the list provider.
    */
   public static JValue filtersToJSONSeriesWriteAccess(ResourceListQuery query, ListProvidersService listProvidersService,
-          Organization org, Map<String, String> series) throws ListProviderException {
+          Map<String, String> series) throws ListProviderException {
 
-    List<Field> filtersJSON = new ArrayList<Field>();
-    List<Field> fields = null;
-    List<ResourceListFilter<?>> filters = query.getAvailableFilters();
-
-    for (ResourceListFilter<?> filter : filters) {
-      fields = new ArrayList<Field>();
+    List<Field> filtersJSON = new ArrayList<>();
+    for (ResourceListFilter<?> filter : query.getAvailableFilters()) {
+      List<Field> fields = new ArrayList<>();
 
       fields.add(f("type", v(filter.getSourceType().toString().toLowerCase())));
       fields.add(f("label", v(filter.getLabel())));
@@ -251,29 +213,6 @@ public final class JSONUtils {
     }
 
     return obj(filtersJSON);
-  }
-
-  /**
-   * Format the given period (define by start and end dates) to a JSON value.
-   *
-   * <pre>
-   * {
-   *    "start": 2012-12-20T23:11:23Z,
-   *    "end": 2012-12-22T10:11:23Z
-   * }
-   * </pre>
-   *
-   * @param start
-   *          The period start date
-   * @param end
-   *          The period end date
-   * @return A {@link JValue} representing the period with a start and end property
-   */
-  public static JValue formatPeriod(Date start, Date end) {
-    if (start == null || end == null)
-      throw new IllegalArgumentException("The given start or end date from the period must not be null!");
-
-    return obj(f("start", v(formatIsoDate(start))), f("end", v(formatIsoDate(end))));
   }
 
   /**
@@ -314,6 +253,10 @@ public final class JSONUtils {
     }
 
     return map;
+  }
+
+  public static void setUserRegex(String regex) {
+    userFilterRegex = regex;
   }
 
 }

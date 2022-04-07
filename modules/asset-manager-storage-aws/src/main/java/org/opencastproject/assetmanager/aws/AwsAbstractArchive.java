@@ -23,15 +23,15 @@ package org.opencastproject.assetmanager.aws;
 
 import static org.apache.commons.lang3.exception.ExceptionUtils.getMessage;
 
+import org.opencastproject.assetmanager.api.storage.AssetStore;
+import org.opencastproject.assetmanager.api.storage.AssetStoreException;
+import org.opencastproject.assetmanager.api.storage.DeletionSelector;
+import org.opencastproject.assetmanager.api.storage.Source;
+import org.opencastproject.assetmanager.api.storage.StoragePath;
 import org.opencastproject.assetmanager.aws.persistence.AwsAssetDatabase;
 import org.opencastproject.assetmanager.aws.persistence.AwsAssetDatabaseException;
 import org.opencastproject.assetmanager.aws.persistence.AwsAssetMapping;
 import org.opencastproject.assetmanager.impl.VersionImpl;
-import org.opencastproject.assetmanager.impl.storage.AssetStore;
-import org.opencastproject.assetmanager.impl.storage.AssetStoreException;
-import org.opencastproject.assetmanager.impl.storage.DeletionSelector;
-import org.opencastproject.assetmanager.impl.storage.Source;
-import org.opencastproject.assetmanager.impl.storage.StoragePath;
 import org.opencastproject.util.ConfigurationException;
 import org.opencastproject.util.NotFoundException;
 import org.opencastproject.util.OsgiUtil;
@@ -52,8 +52,6 @@ import java.io.InputStream;
 import java.util.List;
 
 public abstract class AwsAbstractArchive implements AssetStore {
-  /** The default AWS region name */
-  public static final String DEFAULT_AWS_REGION = "us-east-1";
 
   /** Log facility */
   private static final Logger logger = LoggerFactory.getLogger(AwsAbstractArchive.class);
@@ -108,9 +106,8 @@ public abstract class AwsAbstractArchive implements AssetStore {
     this.database = db;
   }
 
-  /** @see org.opencastproject.assetmanager.impl.storage.AssetStore#copy(StoragePath, StoragePath) */
-  public boolean copy(final StoragePath from, final StoragePath to) throws AssetStoreException
-  {
+  /** @see AssetStore#copy(StoragePath, StoragePath) */
+  public boolean copy(final StoragePath from, final StoragePath to) throws AssetStoreException {
     try {
       AwsAssetMapping map = database.findMapping(from);
       if (map == null) {
@@ -118,8 +115,8 @@ public abstract class AwsAbstractArchive implements AssetStore {
         return false;
       }
       // New mapping will point to the SAME AWS object, nothing will be uploaded
-      logger.debug(String.format("Adding AWS %s link mapping to database: %s points to %s, version %s", getStoreType(),
-              to, map.getObjectKey(), map.getObjectVersion()));
+      logger.debug("Adding AWS {} link mapping to database: {} points to {}, version {}", getStoreType(),
+              to, map.getObjectKey(), map.getObjectVersion());
       database.storeMapping(to, map.getObjectKey(), map.getObjectVersion());
       return true;
     } catch (AwsAssetDatabaseException e) {
@@ -168,7 +165,7 @@ public abstract class AwsAbstractArchive implements AssetStore {
   }
 
   /**
-   * @see org.opencastproject.assetmanager.impl.storage.AssetStore#put(StoragePath, Source)
+   * @see AssetStore#put(StoragePath, Source)
    */
   public void put(StoragePath storagePath, Source source) throws AssetStoreException {
     // If the workspace  to asset manager hard-linking is enabled then this is just a
@@ -188,8 +185,8 @@ public abstract class AwsAbstractArchive implements AssetStore {
 
     try {
       // Upload was successful. Store mapping in the database
-      logger.debug(String.format("Adding AWS %s mapping to database: %s points to %s, object version %s", getStoreType(),
-              storagePath, objectName, objectVersion));
+      logger.debug("Adding AWS {} mapping to database: {} points to {}, object version {}", getStoreType(),
+              storagePath, objectName, objectVersion);
       database.storeMapping(storagePath, objectName, objectVersion);
     } catch (AwsAssetDatabaseException e) {
       throw new AssetStoreException(e);
@@ -198,7 +195,7 @@ public abstract class AwsAbstractArchive implements AssetStore {
 
   protected abstract AwsUploadOperationResult uploadObject(File origin, String objectName) throws AssetStoreException;
 
-  /** @see org.opencastproject.assetmanager.impl.storage.AssetStore#get(StoragePath) */
+  /** @see AssetStore#get(StoragePath) */
   public Opt<InputStream> get(final StoragePath path) throws AssetStoreException {
     try {
       AwsAssetMapping map = database.findMapping(path);
@@ -219,10 +216,11 @@ public abstract class AwsAbstractArchive implements AssetStore {
 
   protected abstract InputStream getObject(AwsAssetMapping map) throws AssetStoreException;
 
-  /** @see org.opencastproject.assetmanager.impl.storage.AssetStore#delete(DeletionSelector) */
+  /** @see AssetStore#delete(DeletionSelector) */
   public boolean delete(DeletionSelector sel) throws AssetStoreException {
     // Build path, version may be null if all versions are desired
-    StoragePath path = new StoragePath(sel.getOrganizationId(), sel.getMediaPackageId(), sel.getVersion().orNull(), null);
+    StoragePath path = new StoragePath(
+        sel.getOrganizationId(), sel.getMediaPackageId(), sel.getVersion().orNull(), null);
     try {
       List<AwsAssetMapping> list = database.findMappingsByMediaPackageAndVersion(path);
       // Traverse all file mappings for that media package / version(s)
@@ -231,13 +229,18 @@ public abstract class AwsAbstractArchive implements AssetStore {
         List<AwsAssetMapping> links = database.findMappingsByKey(map.getObjectKey());
         if (links.size() == 1) {
           // This is the only active mapping thats point to the object; thus, the object can be deleted.
-          logger.debug("Deleting archive object from AWS {}: {}, version {}", getStoreType(), map.getObjectKey(), map.getObjectVersion());
+          logger.debug("Deleting archive object from AWS {}: {}, version {}",
+              getStoreType(), map.getObjectKey(), map.getObjectVersion());
           deleteObject(map);
-          logger.info("Archive object deleted from AWS {}: {}, version {}", getStoreType(), map.getObjectKey(), map.getObjectVersion());
+          logger.info("Archive object deleted from AWS {}: {}, version {}",
+              getStoreType(), map.getObjectKey(), map.getObjectVersion());
         }
         // Add a deletion date to the mapping in the table. This doesn't delete the row.
-        database.deleteMapping(new StoragePath(map.getOrganizationId(), map.getMediaPackageId(), new VersionImpl(map
-                .getVersion()), map.getMediaPackageElementId()));
+        database.deleteMapping(new StoragePath(
+            map.getOrganizationId(),
+            map.getMediaPackageId(),
+            new VersionImpl(map.getVersion()),
+            map.getMediaPackageElementId()));
       }
       return true;
     } catch (AwsAssetDatabaseException e) {

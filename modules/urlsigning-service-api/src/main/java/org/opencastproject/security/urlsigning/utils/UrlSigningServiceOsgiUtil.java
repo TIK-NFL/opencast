@@ -20,7 +20,6 @@
  */
 package org.opencastproject.security.urlsigning.utils;
 
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -85,14 +84,15 @@ public final class UrlSigningServiceOsgiUtil {
                 className, URL_SIGNING_EXPIRES_DURATION_SECONDS_KEY, expireSeconds);
       } catch (NumberFormatException e) {
         logger.warn(
-                "For the class {} unable to parse when a stream should expire from '{}' so using default '{}' because: {}",
-                className, dictionaryValue, defaultExpiry, ExceptionUtils.getStackTrace(e));
+                "For the class {} unable to parse when a stream should expire from '{}' so using default '{}' because:",
+                className, dictionaryValue, defaultExpiry, e);
         expireSeconds = defaultExpiry;
       }
     } else {
       logger.debug(
-              "For the class {} the property '{}' has not been configured, so the default is being used to expire signed URLs in {} seconds.",
-              className, URL_SIGNING_EXPIRES_DURATION_SECONDS_KEY, expireSeconds);
+          "For the class {} the property '{}' has not been configured, so the default is being "
+              + "used to expire signed URLs in {} seconds.",
+          className, URL_SIGNING_EXPIRES_DURATION_SECONDS_KEY, expireSeconds);
     }
     return expireSeconds;
   }
@@ -140,8 +140,9 @@ public final class UrlSigningServiceOsgiUtil {
       }
     } else {
       logger.debug(
-              "For the class {} the property '{}' has not been configured, so the default of signing urls with the client ip is {}.",
-              className, URL_SIGNING_USE_CLIENT_IP, signWithClientIP);
+          "For the class {} the property '{}' has not been configured, so the default of signing "
+              + "urls with the client ip is {}.",
+          className, URL_SIGNING_USE_CLIENT_IP, signWithClientIP);
     }
     return signWithClientIP;
   }

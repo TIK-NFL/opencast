@@ -8,10 +8,10 @@ audio stream only, the implementation will call the composer's "mux" method, wit
 muxed with the video, using the video's movie container.
 
 If it there is one track with a certain flavor, the "encode" method is called which will rewrite (vs. encode) the file
-using the same container and codec (-vcodec copy, -a codec copy), while the container format is determined by ffmpeg via
+using the same container and codec (-vcodec copy, -a codec copy), while the container format is determined by FFmpeg via
 the file's extension. The reason for doing this is that many media files are in a poor state with regard to their
 compatibility (most often, the stream's codec contains differing information from the container), so we are basically
-asking ffmepg to rewrite the whole thing, which will in many cases eliminate problems that would otherwhise occur later
+asking FFmepg to rewrite the whole thing, which will in many cases eliminate problems that would otherwise occur later
 in the pipeline (encoding to flash, mjpeg etc.).
 
 ## Parameter Table
@@ -20,10 +20,10 @@ in the pipeline (encoding to flash, mjpeg etc.).
 |------------------|-------|-----------|
 |source-flavor|presenter/source|Specifies which media should be processed.|
 |target-flavor|presenter/work|Specifies the flavor the new files will get.|
-|mux-encoding-profile    |mux-av.prepared    |The encoding profile to use for media that needs to be muxed (default is 'mux-av.work')|
-|audio-video-encoding-profile    |av.prepared    |The encoding profile to use for media that is audio-video already and needs to be re-encodend (default is av.work)     |
-|video-encoding-profile    |video-only.prepared    |The encoding profile to use for media that is only video and needs to be re-encodend (default is video-only.work)     |
-|audio-encoding-profile    |audio-only.prepared    |The encoding profile to use for media that is only audio and needs to be re-encodend (default is audio-only.work)     |
+|mux-encoding-profile    |mux-av.copy    |The encoding profile to use for media that needs to be muxed (default is 'mux-av.copy')|
+|audio-video-encoding-profile    |av.copy    |The encoding profile to use for media that is audio-video already and needs to be re-encodend (default is av.copy)     |
+|video-encoding-profile    |video-only.copy    |The encoding profile to use for media that is only video and needs to be re-encodend (default is video-only.copy)     |
+|audio-encoding-profile    |audio-only.copy    |The encoding profile to use for media that is only audio and needs to be re-encodend (default is audio-only.copy)     |
 |rewrite    |true    |Should files be rewritten     |
 |audio-muxing-source-flavors|presentation/source,presentation/\*,\*/\*    |If there is no matching flavor to mux, search for a track with audio that can be muxed by going from left to right through this comma-separated list of source flavors|
 
@@ -81,6 +81,5 @@ In this example, the PrepareAVWorkflowOperation would perform the following step
 3. Search tracks of flavor presentation/*
 4. Search tracks of flavor presenter/audio (?/audio)
 5. Search tracks of flavor \*/\*
-
 
 

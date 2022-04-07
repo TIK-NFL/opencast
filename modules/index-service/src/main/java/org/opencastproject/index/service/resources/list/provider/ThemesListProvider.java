@@ -21,17 +21,17 @@
 
 package org.opencastproject.index.service.resources.list.provider;
 
-import org.opencastproject.index.service.exception.ListProviderException;
-import org.opencastproject.index.service.impl.index.AbstractSearchIndex;
-import org.opencastproject.index.service.impl.index.theme.Theme;
-import org.opencastproject.index.service.impl.index.theme.ThemeSearchQuery;
-import org.opencastproject.index.service.resources.list.api.ResourceListProvider;
-import org.opencastproject.index.service.resources.list.api.ResourceListQuery;
-import org.opencastproject.matterhorn.search.SearchIndexException;
-import org.opencastproject.matterhorn.search.SearchQuery;
-import org.opencastproject.matterhorn.search.SearchResult;
-import org.opencastproject.matterhorn.search.SearchResultItem;
+import org.opencastproject.elasticsearch.api.SearchIndexException;
+import org.opencastproject.elasticsearch.api.SearchResult;
+import org.opencastproject.elasticsearch.api.SearchResultItem;
+import org.opencastproject.elasticsearch.index.ElasticsearchIndex;
+import org.opencastproject.elasticsearch.index.objects.theme.IndexTheme;
+import org.opencastproject.elasticsearch.index.objects.theme.ThemeSearchQuery;
+import org.opencastproject.list.api.ListProviderException;
+import org.opencastproject.list.api.ResourceListProvider;
+import org.opencastproject.list.api.ResourceListQuery;
 import org.opencastproject.security.api.SecurityService;
+import org.opencastproject.util.requests.SortCriterion.Order;
 
 import org.osgi.framework.BundleContext;
 import org.slf4j.Logger;
@@ -50,7 +50,7 @@ public class ThemesListProvider implements ResourceListProvider {
 
   private static final Logger logger = LoggerFactory.getLogger(ThemesListProvider.class);
 
-  private AbstractSearchIndex searchIndex;
+  private ElasticsearchIndex searchIndex;
 
   private SecurityService securityService;
 
@@ -59,7 +59,7 @@ public class ThemesListProvider implements ResourceListProvider {
   }
 
   /** OSGi callback for the search index. */
-  public void setIndex(AbstractSearchIndex index) {
+  public void setIndex(ElasticsearchIndex index) {
     this.searchIndex = index;
   }
 
@@ -84,8 +84,8 @@ public class ThemesListProvider implements ResourceListProvider {
       themeQuery.withOffset(query.getOffset().getOrElse(0));
       int limit = query.getLimit().getOrElse(Integer.MAX_VALUE - themeQuery.getOffset());
       themeQuery.withLimit(limit);
-      themeQuery.sortByName(SearchQuery.Order.Ascending);
-      SearchResult<Theme> results = null;
+      themeQuery.sortByName(Order.Ascending);
+      SearchResult<IndexTheme> results = null;
       try {
         results = searchIndex.getByQuery(themeQuery);
       } catch (SearchIndexException e) {
@@ -93,8 +93,8 @@ public class ThemesListProvider implements ResourceListProvider {
         throw new ListProviderException("No themes list for list name " + listName + " found!");
       }
 
-      for (SearchResultItem<Theme> item : results.getItems()) {
-        Theme theme = item.getSource();
+      for (SearchResultItem<IndexTheme> item : results.getItems()) {
+        IndexTheme theme = item.getSource();
         list.put(Long.toString(theme.getIdentifier()), theme.getName());
       }
     }
@@ -104,8 +104,8 @@ public class ThemesListProvider implements ResourceListProvider {
       themeQuery.withOffset(query.getOffset().getOrElse(0));
       int limit = query.getLimit().getOrElse(Integer.MAX_VALUE - themeQuery.getOffset());
       themeQuery.withLimit(limit);
-      themeQuery.sortByName(SearchQuery.Order.Ascending);
-      SearchResult<Theme> results = null;
+      themeQuery.sortByName(Order.Ascending);
+      SearchResult<IndexTheme> results = null;
       try {
         results = searchIndex.getByQuery(themeQuery);
       } catch (SearchIndexException e) {
@@ -113,8 +113,8 @@ public class ThemesListProvider implements ResourceListProvider {
         throw new ListProviderException("No themes list for list name " + listName + " found!");
       }
 
-      for (SearchResultItem<Theme> item : results.getItems()) {
-        Theme theme = item.getSource();
+      for (SearchResultItem<IndexTheme> item : results.getItems()) {
+        IndexTheme theme = item.getSource();
         if (theme.getDescription() == null) {
           theme.setDescription("");
         }

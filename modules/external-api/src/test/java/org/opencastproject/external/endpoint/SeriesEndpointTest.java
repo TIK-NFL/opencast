@@ -32,7 +32,6 @@ import static org.apache.http.HttpStatus.SC_NO_CONTENT;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
-import static org.opencastproject.test.rest.RestServiceTestEnv.localhostRandomPort;
 import static org.opencastproject.test.rest.RestServiceTestEnv.testEnvForClasses;
 
 import org.opencastproject.test.rest.RestServiceTestEnv;
@@ -45,6 +44,7 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import io.restassured.http.ContentType;
 import uk.co.datumedge.hamcrest.json.SameJSONAs;
 
 /** Test cases for {@link SeriesEndpoint} */
@@ -54,7 +54,7 @@ public class SeriesEndpointTest {
   private static final String APP_V1_0_0_XML = "application/v1.0.0+xml";
 
   /** The REST test environment */
-  private static final RestServiceTestEnv env = testEnvForClasses(localhostRandomPort(), TestSeriesEndpoint.class);
+  private static final RestServiceTestEnv env = testEnvForClasses(TestSeriesEndpoint.class);
 
   /** The json parser */
   private static final JSONParser parser = new JSONParser();
@@ -190,6 +190,7 @@ public class SeriesEndpointTest {
   @Test
   public void testMissingMetadataUpdateSeriesMetadataJson() throws Exception {
     given().pathParam("seriesId", "4fd0ef66-aea5-4b7a-a62a-a4ada0eafd6f").queryParam("type", "dublincore/series")
+            .contentType(ContentType.URLENC)
             .accept(APP_V1_0_0_JSON).log().all().expect().statusCode(SC_BAD_REQUEST).when()
             .put(env.host("/{seriesId}/metadata"));
   }

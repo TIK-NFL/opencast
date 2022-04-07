@@ -44,8 +44,6 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
 import org.osgi.service.component.ComponentContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -56,8 +54,6 @@ import java.util.Set;
 import java.util.UUID;
 
 public class ConfigurablePublicationServiceImpl extends AbstractJobProducer implements ConfigurablePublicationService {
-
-  private static final Logger logger = LoggerFactory.getLogger(ConfigurablePublicationServiceImpl.class);
 
   /* Gson is thread-safe so we use a single instance */
   private Gson gson = new Gson();
@@ -202,9 +198,10 @@ public class ConfigurablePublicationServiceImpl extends AbstractJobProducer impl
         if (!JobUtil.waitForJob(serviceRegistry, job).isSuccess()) {
           throw new DistributionException("At least one of the publication jobs did not complete successfully");
         }
-        List<? extends MediaPackageElement> distributedElements = MediaPackageElementParser.getArrayFromXml(job.getPayload());
+        List<? extends MediaPackageElement> distributedElements
+            = MediaPackageElementParser.getArrayFromXml(job.getPayload());
         for (MediaPackageElement mpe : distributedElements) {
-           PublicationImpl.addElementToPublication(publication, mpe);
+          PublicationImpl.addElementToPublication(publication, mpe);
         }
       } finally {
         // Remove our changes

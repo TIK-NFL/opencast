@@ -7,7 +7,7 @@
   <parent>
     <groupId>org.opencastproject</groupId>
     <artifactId>base</artifactId>
-    <version>8-SNAPSHOT</version>
+    <version>11-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
   <properties>
@@ -15,10 +15,30 @@
     <checkstyle.skip>false</checkstyle.skip>
   </properties>
   <dependencies>
+    <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-lang3</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>jakarta.xml.bind</groupId>
+      <artifactId>jakarta.xml.bind-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.entwinemedia.common</groupId>
+      <artifactId>functional</artifactId>
+    </dependency>
     <!-- Opencast -->
     <dependency>
       <groupId>org.opencastproject</groupId>
-      <artifactId>opencast-kernel</artifactId>
+      <artifactId>opencast-common</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -36,33 +56,10 @@
       <artifactId>opencast-asset-manager-impl</artifactId>
       <version>${project.version}</version>
     </dependency>
-    <!--  For restore feature -->
-    <dependency>
-      <groupId>org.opencastproject</groupId>
-      <artifactId>opencast-ingest-service-api</artifactId>
-      <version>${project.version}</version>
-    </dependency>
     <!-- AWS SDK BEGIN -->
     <dependency>
       <groupId>org.apache.servicemix.bundles</groupId>
       <artifactId>org.apache.servicemix.bundles.aws-java-sdk</artifactId>
-      <version>1.11.49_1</version>
-    </dependency>
-    <dependency>
-      <groupId>com.fasterxml.jackson.core</groupId>
-      <artifactId>jackson-annotations</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.fasterxml.jackson.core</groupId>
-      <artifactId>jackson-core</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.fasterxml.jackson.core</groupId>
-      <artifactId>jackson-databind</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.fasterxml.jackson.dataformat</groupId>
-      <artifactId>jackson-dataformat-cbor</artifactId>
     </dependency>
     <!-- AWS SDK END -->
     <dependency>
@@ -71,7 +68,7 @@
     </dependency>
     <dependency>
       <groupId>org.osgi</groupId>
-      <artifactId>org.osgi.compendium</artifactId>
+      <artifactId>osgi.cmpn</artifactId>
     </dependency>
     <dependency>
       <groupId>org.slf4j</groupId>
@@ -91,27 +88,11 @@
     <!-- Persistence -->
     <dependency>
       <groupId>org.eclipse.persistence</groupId>
-      <artifactId>javax.persistence</artifactId>
+      <artifactId>jakarta.persistence</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.eclipse.persistence</groupId>
-      <artifactId>org.eclipse.persistence.core</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.eclipse.persistence</groupId>
-      <artifactId>org.eclipse.persistence.jpa</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.eclipse.persistence</groupId>
-      <artifactId>org.eclipse.persistence.asm</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.eclipse.persistence</groupId>
-      <artifactId>org.eclipse.persistence.antlr</artifactId>
-      <scope>test</scope>
+      <groupId>com.mchange</groupId>
+      <artifactId>c3p0</artifactId>
     </dependency>
     <dependency>
       <groupId>com.h2database</groupId>
@@ -122,8 +103,17 @@
   <build>
     <plugins>
       <plugin>
-        <groupId>de.empulse.eclipselink</groupId>
-        <artifactId>staticweave-maven-plugin</artifactId>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <extensions>true</extensions>
+        <configuration>
+          <ignoredUnusedDeclaredDependencies>
+            <!-- provide a logger for tests -->
+            <ignoredUnusedDeclaredDependency>org.slf4j:slf4j-log4j12</ignoredUnusedDeclaredDependency>
+            <!-- provides database for testing -->
+            <ignoredUnusedDeclaredDependency>com.h2database:h2</ignoredUnusedDeclaredDependency>
+          </ignoredUnusedDeclaredDependencies>
+        </configuration>
       </plugin>
       <plugin>
         <groupId>org.apache.felix</groupId>
@@ -140,10 +130,6 @@
               com.amazonaws.services.s3.*,
               *;resolution:=optional
             </Import-Package>
-            <Service-Component>
-              OSGI-INF/aws-asset-persistence.xml,
-              OSGI-INF/aws-s3-asset-store.xml
-            </Service-Component>
             <Meta-Persistence>
               META-INF/persistence.xml
             </Meta-Persistence>

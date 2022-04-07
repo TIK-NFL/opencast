@@ -22,10 +22,13 @@
 
 package org.opencastproject.feed.impl;
 
+import static org.apache.http.HttpStatus.SC_OK;
+
 import org.opencastproject.feed.api.Feed;
 import org.opencastproject.feed.api.FeedGenerator;
 import org.opencastproject.security.api.Organization;
 import org.opencastproject.security.api.SecurityService;
+import org.opencastproject.util.ReadinessIndicator;
 import org.opencastproject.util.doc.rest.RestParameter;
 import org.opencastproject.util.doc.rest.RestParameter.Type;
 import org.opencastproject.util.doc.rest.RestQuery;
@@ -63,18 +66,19 @@ import javax.ws.rs.core.Variant;
 /**
  * This class is responsible of creating RSS and Atom feeds.
  * <p>
- * The implementation relies on the request uri containing information about the requested feed type and the query used
- * to construct the feed contents.
+ * The implementation relies on the request uri containing information about the requested feed
+ * type and the query used to construct the feed contents.
  * </p>
  * <p>
- * Therefore, assuming that this servlet has been mounted to <code>/feeds/*</code>, a correct uri for this servlet looks
- * like this: <code>/feeds/&lt;feed type&gt;/&lt;version&gt;/&lt;query&gt;</code>, e. g.
+ * Therefore, assuming that this servlet has been mounted to <code>/feeds/*</code>, a correct uri
+ * for this servlet looks like this:
+ * <code>/feeds/&lt;feed type&gt;/&lt;version&gt;/&lt;query&gt;</code>, e. g.
  *
  * <pre>
  *     http://localhost/feeds/Atom/1.0/favorites
  * </pre>
  *
- * which would indicate a requeste to an atom 1.0 feed with <tt>favourites</tt> being the query.
+ * which would indicate a requeste to an atom 1.0 feed with <code>favourites</code> being the query.
  *
  * The servlet returns a HTTP status 200 with the feed data.
  * If the feed could not be found because the query is unknown a HTTP error 404 is returned
@@ -110,6 +114,15 @@ public class FeedServiceImpl {
   @GET
   @Path("/feeds")
   @Produces(MediaType.APPLICATION_JSON)
+  @RestQuery(
+      name = "feeds",
+      description = "List available series based feeds",
+      returnDescription = "Return list of feeds",
+      responses = {
+          @RestResponse(
+              responseCode = SC_OK,
+              description = "List of available feeds returned.")
+      })
   public String listFeedServices() {
 
     List<Map<String, String>> feedServices = new ArrayList<>();
@@ -131,27 +144,42 @@ public class FeedServiceImpl {
     return gson.toJson(feedServices);
   }
 
-  /*
-   * Note: We're using Regex matching for the path here, instead of normal JAX-RS paths.  Previously this class was a servlet,
-   * which was fine except that it had auth issues.  Removing the servlet fixed the auth issues, but then the paths (as written
-   * in the RestQuery docs) don't work because  JAX-RS does not support having "/" characters as part of the variable's value.
+  /**
+   * Note: We're using Regex matching for the path here, instead of normal
+   * JAX-RS paths. Previously this class was a servlet, which was fine except
+   * that it had auth issues.  Removing the servlet fixed the auth issues, but
+   * then the paths (as written in the RestQuery docs) don't work because
+   * JAX-RS does not support having "/" characters as part of the variable's
+   * value.
    *
-   * So, what we've done instead is match everything that comes in under the /feeds/ namespace, and then substring it out the way
-   * the old servlet code did.  But without the servlet, or auth issues :)
+   * So, what we've done instead is match everything that comes in under the
+   * /feeds/ namespace, and then substring it out the way the old servlet code
+   * did.  But without the servlet, or auth issues :)
    */
   @GET
   @Produces(MediaType.TEXT_XML)
   @Path("/{type}/{version}/{query:.*}")
-  @RestQuery(name = "getFeed", description = "Gets an Atom or RSS feed", pathParameters = {
+  @RestQuery(
+      name = "getFeed",
+      description = "Gets an Atom or RSS feed",
+      pathParameters = {
           @RestParameter(description = "Feed type (atom or rss)", name = "type", type = Type.STRING, isRequired = true),
           @RestParameter(description = "Feed version", name = "version", type = Type.STRING, isRequired = true),
           @RestParameter(description = "Feed query", name = "query", type = Type.STRING, isRequired = true)
-      }, restParameters = {
+      },
+      restParameters = {
           @RestParameter(description = "Requested result size", name = "size", type = Type.INTEGER, isRequired = false)
-      }, reponses = {
-          @RestResponse(description = "Return the feed of the appropriate type", responseCode = HttpServletResponse.SC_OK),
+      },
+      responses = {
+          @RestResponse(
+              description = "Return the feed of the appropriate type",
+              responseCode = HttpServletResponse.SC_OK
+          ),
           @RestResponse(description = "", responseCode = HttpServletResponse.SC_BAD_REQUEST),
-          @RestResponse(description = "", responseCode = HttpServletResponse.SC_INTERNAL_SERVER_ERROR) }, returnDescription = "")
+          @RestResponse(description = "", responseCode = HttpServletResponse.SC_INTERNAL_SERVER_ERROR)
+      },
+      returnDescription = ""
+  )
   public Response getFeed(@Context HttpServletRequest request) {
     String contentType = null;
 
@@ -167,10 +195,11 @@ public class FeedServiceImpl {
     }
 
     // Set the content type
-    if (feedInfo.getType().equals(Feed.Type.Atom))
+    if (feedInfo.getType().equals(Feed.Type.Atom)) {
       contentType = "application/atom+xml";
-    else if (feedInfo.getType().equals(Feed.Type.RSS))
+    } else if (feedInfo.getType().equals(Feed.Type.RSS)) {
       contentType = "application/rss+xml";
+    }
 
     // Have a feed generator create the requested feed
     Feed feed = null;
@@ -191,7 +220,7 @@ public class FeedServiceImpl {
     }
 
     // Set character encoding
-    Variant v = new Variant(MediaType.valueOf(contentType), null, feed.getEncoding());
+    Variant v = new Variant(MediaType.valueOf(contentType), (String) null, feed.getEncoding());
     String outputString = null;
     try {
       if (feedInfo.getType().equals(Feed.Type.RSS)) {
@@ -224,12 +253,14 @@ public class FeedServiceImpl {
    */
   private FeedInfo extractFeedInfo(HttpServletRequest request) throws IllegalStateException {
     String path = request.getPathInfo();
-    if (path.startsWith("/"))
+    if (path.startsWith("/")) {
       path = path.substring(1);
+    }
     String[] pathElements = path.split("/");
 
-    if (pathElements.length < 3)
+    if (pathElements.length < 3) {
       throw new IllegalStateException("Cannot extract requested feed parameters.");
+    }
     Feed.Type type = null;
     try {
       type = Feed.Type.parseString(pathElements[0]);
@@ -244,8 +275,9 @@ public class FeedServiceImpl {
     }
     int queryLength = pathElements.length - 2;
     String[] query = new String[queryLength];
-    for (int i = 0; i < queryLength; i++)
+    for (int i = 0; i < queryLength; i++) {
       query[i] = pathElements[i + 2];
+    }
 
     String sizeParam = request.getParameter(PARAM_SIZE);
     if (StringUtils.isNotBlank(sizeParam)) {
@@ -290,6 +322,10 @@ public class FeedServiceImpl {
    */
   void setSecurityService(SecurityService securityService) {
     this.securityService = securityService;
+  }
+
+  public void setProfilesReadyIndicator(ReadinessIndicator readyIndicator) {
+    //Only activate service if ReadinessIndicator is registered.
   }
 
 }

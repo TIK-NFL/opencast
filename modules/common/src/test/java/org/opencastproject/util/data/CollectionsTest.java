@@ -32,8 +32,6 @@ import static org.opencastproject.util.data.Arrays.array;
 import static org.opencastproject.util.data.Collections.appendTo;
 import static org.opencastproject.util.data.Collections.concat;
 import static org.opencastproject.util.data.Collections.filter;
-import static org.opencastproject.util.data.Collections.flatMap;
-import static org.opencastproject.util.data.Collections.foldl;
 import static org.opencastproject.util.data.Collections.head;
 import static org.opencastproject.util.data.Collections.iterator;
 import static org.opencastproject.util.data.Collections.join;
@@ -76,23 +74,6 @@ public class CollectionsTest {
   }
 
   @Test
-  public void testFlatMap() {
-    List<String> list = newTestList();
-    Collection<String> mapped = flatMap(list, new Function<String, Collection<String>>() {
-      @Override
-      public Collection<String> apply(String s) {
-        return list(">", s);
-      }
-    });
-    assertSame(mapped.getClass(), list.getClass());
-    assertEquals(2, list.size());
-    assertEquals(4, mapped.size());
-    assertTrue(mapped.contains(">"));
-    assertTrue(mapped.contains("one"));
-    assertTrue(mapped.contains("two"));
-  }
-
-  @Test
   public void testFilter() {
     List<String> list = newTestList();
     Collection<String> filtered = filter(list, new Predicate<String>() {
@@ -127,30 +108,6 @@ public class CollectionsTest {
   }
 
   @Test
-  public void testFoldl() {
-    List<Integer> ints = list(1, 2, 3, 4);
-    assertTrue(10 == foldl(ints, 0, new Function2<Integer, Integer, Integer>() {
-      @Override
-      public Integer apply(Integer a, Integer b) {
-        return a + b;
-      }
-    }));
-    List<String> strings = list("vaughn", "bodé", "andré", "franquin");
-    assertTrue(23 == foldl(strings, 0, new Function2<Integer, String, Integer>() {
-      @Override
-      public Integer apply(Integer a, String s) {
-        return a + s.length();
-      }
-    }));
-    assertTrue(5 == foldl(java.util.Collections.<Integer>emptyList(), 5, new Function2<Integer, Integer, Integer>() {
-      @Override
-      public Integer apply(Integer a, Integer b) {
-        return a + b;
-      }
-    }));
-  }
-
-  @Test
   public void mkString() {
     List<Integer> l = list(1, 2, 3);
     assertEquals("1-2-3", Collections.mkString(l, "-"));
@@ -169,7 +126,7 @@ public class CollectionsTest {
   @Test
   public void testList() {
     // compile test
-    List<Object> x = list(1, new Object(), "hallo");
+    list(1, new Object(), "hallo");
     // does not compile
     // List<String> y = list(1, new Object(), "hallo");
   }
@@ -220,7 +177,7 @@ public class CollectionsTest {
 
   @Test
   public void testAppendArray() {
-    Object[] as = append(Object.class, new String[]{"a", "b"}, new Exception());
+    append(Object.class, new String[]{"a", "b"}, new Exception());
   }
 
   @Test
@@ -234,14 +191,14 @@ public class CollectionsTest {
   public void testAppendTo() {
     final List<Object> a = new ArrayList<Object>();
     // compile check
-    final Collection<Object> b = appendTo(a, list(1));
+    appendTo(a, list(1));
     appendTo(a, list("a"));
   }
 
   @Test
   public void testCons() {
     // compile check
-    List<Object> x = Collections.<Object>cons("1", list(1, 3));
+    Collections.<Object>cons("1", list(1, 3));
   }
 
   @Test

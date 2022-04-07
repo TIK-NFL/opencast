@@ -46,6 +46,9 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.text.StringEscapeUtils;
 import org.osgi.service.cm.ManagedService;
 import org.osgi.service.component.ComponentContext;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,6 +67,17 @@ import java.util.List;
 import java.util.Map;
 
 /** Create video animations using Synfig */
+@Component(
+    immediate = true,
+    service = {
+        AnimateService.class,
+        ManagedService.class
+    },
+    property = {
+        "service.description=Animation Service",
+        "service.pid=org.opencastproject.animate.impl.AnimateServiceImpl"
+    }
+)
 public class AnimateServiceImpl extends AbstractJobProducer implements AnimateService, ManagedService {
 
   /** Configuration key for setting a custom synfig path */
@@ -104,6 +118,7 @@ public class AnimateServiceImpl extends AbstractJobProducer implements AnimateSe
   }
 
   @Override
+  @Activate
   public void activate(ComponentContext cc) {
     super.activate(cc);
     logger.debug("Activated animate service");
@@ -111,8 +126,9 @@ public class AnimateServiceImpl extends AbstractJobProducer implements AnimateSe
 
   @Override
   public void updated(Dictionary properties) throws ConfigurationException {
-    if (properties == null)
+    if (properties == null) {
       return;
+    }
     logger.debug("Start updating animate service");
 
     synfigBinary = StringUtils.defaultIfBlank((String) properties.get(SYNFIG_BINARY_CONFIG), SYNFIG_BINARY_DEFAULT);
@@ -234,7 +250,8 @@ public class AnimateServiceImpl extends AbstractJobProducer implements AnimateSe
 
 
   @Override
-  public Job animate(URI animation, Map<String, String> metadata, List<String> arguments) throws AnimateServiceException {
+  public Job animate(URI animation, Map<String, String> metadata, List<String> arguments)
+          throws AnimateServiceException {
     Gson gson = new Gson();
     List<String> jobArguments = Arrays.asList(animation.toString(), gson.toJson(metadata), gson.toJson(arguments));
     try {
@@ -265,22 +282,27 @@ public class AnimateServiceImpl extends AbstractJobProducer implements AnimateSe
     return organizationDirectoryService;
   }
 
+  @Reference
   public void setWorkspace(Workspace workspace) {
     this.workspace = workspace;
   }
 
+  @Reference
   public void setServiceRegistry(ServiceRegistry jobManager) {
     this.serviceRegistry = jobManager;
   }
 
+  @Reference
   public void setSecurityService(SecurityService securityService) {
     this.securityService = securityService;
   }
 
+  @Reference
   public void setUserDirectoryService(UserDirectoryService userDirectoryService) {
     this.userDirectoryService = userDirectoryService;
   }
 
+  @Reference
   public void setOrganizationDirectoryService(OrganizationDirectoryService organizationDirectoryService) {
     this.organizationDirectoryService = organizationDirectoryService;
   }

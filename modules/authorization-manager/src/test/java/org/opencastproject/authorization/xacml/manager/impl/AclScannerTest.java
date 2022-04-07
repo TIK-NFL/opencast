@@ -24,7 +24,6 @@ package org.opencastproject.authorization.xacml.manager.impl;
 import static org.easymock.EasyMock.anyLong;
 import static org.easymock.EasyMock.anyObject;
 import static org.easymock.EasyMock.anyString;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -32,26 +31,31 @@ import org.opencastproject.authorization.xacml.XACMLParsingException;
 import org.opencastproject.authorization.xacml.manager.api.AclService;
 import org.opencastproject.authorization.xacml.manager.api.AclServiceFactory;
 import org.opencastproject.authorization.xacml.manager.api.ManagedAcl;
-import org.opencastproject.message.broker.api.MessageSender;
+import org.opencastproject.elasticsearch.api.SearchResultItem;
+import org.opencastproject.elasticsearch.impl.SearchResultImpl;
+import org.opencastproject.elasticsearch.index.ElasticsearchIndex;
+import org.opencastproject.elasticsearch.index.objects.event.Event;
+import org.opencastproject.elasticsearch.index.objects.event.EventSearchQuery;
+import org.opencastproject.elasticsearch.index.objects.series.Series;
+import org.opencastproject.elasticsearch.index.objects.series.SeriesSearchQuery;
 import org.opencastproject.security.api.AccessControlList;
 import org.opencastproject.security.api.DefaultOrganization;
 import org.opencastproject.security.api.Organization;
 import org.opencastproject.security.api.OrganizationDirectoryService;
 import org.opencastproject.security.api.SecurityService;
+import org.opencastproject.security.api.User;
 import org.opencastproject.security.impl.jpa.JpaOrganization;
 import org.opencastproject.util.data.Option;
 
 import org.easymock.EasyMock;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
+import org.xml.sax.SAXParseException;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-
-import javax.xml.bind.UnmarshalException;
 
 public class AclScannerTest {
 
@@ -78,17 +82,30 @@ public class AclScannerTest {
     orgService = EasyMock.createNiceMock(OrganizationDirectoryService.class);
     EasyMock.expect(orgService.getOrganizations()).andReturn(orgs).anyTimes();
 
+    User user = EasyMock.createNiceMock(User.class);
+    EasyMock.expect(user.getOrganization()).andReturn(new DefaultOrganization()).anyTimes();
+
     final SecurityService securityService = EasyMock.createNiceMock(SecurityService.class);
+    EasyMock.expect(securityService.getUser()).andReturn(user).anyTimes();
 
-    final MessageSender messageSender = EasyMock.createNiceMock(MessageSender.class);
+    SearchResultImpl<Event> eventSearchResult = EasyMock.createNiceMock(SearchResultImpl.class);
+    EasyMock.expect(eventSearchResult.getItems()).andReturn(new SearchResultItem[] {}).anyTimes();
 
-    EasyMock.replay(orgService, messageSender, securityService);
+    SearchResultImpl<Series> seriesSearchResult = EasyMock.createNiceMock(SearchResultImpl.class);
+    EasyMock.expect(seriesSearchResult.getItems()).andReturn(new SearchResultItem[] {}).anyTimes();
+
+    final ElasticsearchIndex index = EasyMock.createNiceMock(ElasticsearchIndex.class);
+    EasyMock.expect(index.getByQuery(EasyMock.anyObject(EventSearchQuery.class))).andReturn(eventSearchResult)
+            .anyTimes();
+    EasyMock.expect(index.getByQuery(EasyMock.anyObject(SeriesSearchQuery.class))).andReturn(seriesSearchResult)
+            .anyTimes();
+
+    EasyMock.replay(orgService, securityService, index, user, eventSearchResult, seriesSearchResult);
 
     AclServiceFactory aclServiceFactory = new AclServiceFactory() {
       @Override
       public AclService serviceFor(Organization org) {
-        return new AclServiceImpl(new DefaultOrganization(), aclDb, null, null, null,
-                messageSender);
+        return new AclServiceImpl(new DefaultOrganization(), aclDb, index, securityService);
       }
     };
 
@@ -96,44 +113,6 @@ public class AclScannerTest {
     aclScanner.setAclServiceFactory(aclServiceFactory);
     aclScanner.setOrganizationDirectoryService(orgService);
     aclScanner.setSecurityService(securityService);
-  }
-
-  @Test
-  @Ignore
-  public void testCanHandle() {
-    File wrongDirectory = EasyMock.createNiceMock(File.class);
-    EasyMock.expect(wrongDirectory.getName()).andReturn("wrong").anyTimes();
-    EasyMock.replay(wrongDirectory);
-
-    File correctDirectory = EasyMock.createNiceMock(File.class);
-    EasyMock.expect(correctDirectory.getName()).andReturn(AclScanner.ACL_DIRECTORY).anyTimes();
-    EasyMock.replay(correctDirectory);
-
-    File wrongFilenameWrongDirectory = EasyMock.createNiceMock(File.class);
-    EasyMock.expect(wrongFilenameWrongDirectory.getParentFile()).andReturn(wrongDirectory);
-    EasyMock.expect(wrongFilenameWrongDirectory.getName()).andReturn("wrong.properties");
-    EasyMock.replay(wrongFilenameWrongDirectory);
-
-    File wrongFilenameRightDirectory = EasyMock.createNiceMock(File.class);
-    EasyMock.expect(wrongFilenameRightDirectory.getParentFile()).andReturn(correctDirectory);
-    EasyMock.expect(wrongFilenameRightDirectory.getName()).andReturn("wrong.properties");
-    EasyMock.replay(wrongFilenameRightDirectory);
-
-    File rightFilenameWrongDirectory = EasyMock.createNiceMock(File.class);
-    EasyMock.expect(rightFilenameWrongDirectory.getParentFile()).andReturn(wrongDirectory);
-    EasyMock.expect(rightFilenameWrongDirectory.getName()).andReturn("right.xml");
-    EasyMock.replay(rightFilenameWrongDirectory);
-
-    File rightFilenameRightDirectory = EasyMock.createNiceMock(File.class);
-    EasyMock.expect(rightFilenameRightDirectory.getParentFile()).andReturn(correctDirectory).anyTimes();
-    EasyMock.expect(rightFilenameRightDirectory.getName()).andReturn("right.xml").anyTimes();
-    EasyMock.replay(rightFilenameRightDirectory);
-
-    AclScanner listProvidersScanner = new AclScanner();
-    assertFalse(listProvidersScanner.canHandle(wrongFilenameWrongDirectory));
-    assertFalse(listProvidersScanner.canHandle(wrongFilenameRightDirectory));
-    assertFalse(listProvidersScanner.canHandle(rightFilenameWrongDirectory));
-    assertTrue(listProvidersScanner.canHandle(rightFilenameRightDirectory));
   }
 
   @Test
@@ -160,7 +139,7 @@ public class AclScannerTest {
       aclScanner.install(file);
       fail("Should not be parsed.");
     } catch (XACMLParsingException e) {
-      assertTrue("The file can not be parsed.", e.getCause() instanceof UnmarshalException);
+      assertTrue("The file can not be parsed.", e.getCause() instanceof SAXParseException);
     }
   }
 
@@ -211,7 +190,7 @@ public class AclScannerTest {
       aclScanner.update(file);
       fail("Should not be parsed.");
     } catch (XACMLParsingException e) {
-      assertTrue("The file can not be parsed.", e.getCause() instanceof UnmarshalException);
+      assertTrue("The file can not be parsed.", e.getCause() instanceof SAXParseException);
     }
   }
 

@@ -21,33 +21,21 @@
 
 package org.opencastproject.test.rest;
 
-import static org.opencastproject.util.data.Collections.toArray;
-import static org.opencastproject.util.data.Monadics.mlist;
-import static org.opencastproject.util.data.Option.some;
 import static org.opencastproject.util.data.functions.Misc.chuck;
 
 import org.opencastproject.util.UrlSupport;
-import org.opencastproject.util.data.Function;
-import org.opencastproject.util.data.Option;
-
-import com.sun.jersey.api.core.ClassNamesResourceConfig;
-import com.sun.jersey.api.core.PackagesResourceConfig;
-import com.sun.jersey.api.core.ResourceConfig;
-import com.sun.jersey.spi.container.servlet.ServletContainer;
 
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
-import org.hamcrest.BaseMatcher;
-import org.hamcrest.Description;
+import org.glassfish.jersey.server.ResourceConfig;
+import org.glassfish.jersey.servlet.ServletContainer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
+import java.net.BindException;
 import java.net.URL;
-import java.net.URLConnection;
-import java.util.Random;
-import java.util.regex.Pattern;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Helper environment for creating REST service unit tests.
@@ -55,7 +43,7 @@ import java.util.regex.Pattern;
  * The REST endpoint to test needs a no-arg constructor in order to be created by the framework.
  * <p>
  * Write REST unit tests using <a href="http://code.google.com/p/rest-assured/">rest assured</a>.
- * <h3>Example Usage</h3>
+ * <h2>Example Usage</h2>
  * 
  * <pre>
  *   import static com.jayway.restassured.RestAssured.*;
@@ -96,10 +84,10 @@ import java.util.regex.Pattern;
  * </pre>
  */
 public final class RestServiceTestEnv {
-  private Server hs;
+  private Server server;
 
-  private final URL baseUrl;
-  private final Option<? extends ResourceConfig> cfg;
+  private URL baseUrl = null;
+  private final ResourceConfig cfg;
 
   private static final Logger logger = LoggerFactory.getLogger(RestServiceTestEnv.class);
 
@@ -107,59 +95,20 @@ public final class RestServiceTestEnv {
    * Create an environment for <code>baseUrl</code>. The base URL should be the URL where the service to test is
    * mounted, e.g. http://localhost:8090/test
    */
-  private RestServiceTestEnv(URL baseUrl, Option<? extends ResourceConfig> cfg) {
-    this.baseUrl = baseUrl;
+  private RestServiceTestEnv(ResourceConfig cfg) {
     this.cfg = cfg;
   }
 
-  public static RestServiceTestEnv testEnvScanAllPackages(URL baseUrl) {
-    return new RestServiceTestEnv(baseUrl, Option.<ResourceConfig> none());
-  }
-
-  public static RestServiceTestEnv testEnvScanPackages(URL baseUrl, Package... servicePkgs) {
-    return new RestServiceTestEnv(baseUrl,
-            some(new PackagesResourceConfig(toArray(String.class, mlist(servicePkgs).map(pkgName).value()))));
-  }
-
-  public static RestServiceTestEnv testEnvForClasses(URL baseUrl, Class... restServices) {
-    return new RestServiceTestEnv(baseUrl, some(new ClassNamesResourceConfig(restServices)));
-  }
-
-  public static RestServiceTestEnv testEnvForCustomConfig(String baseUrl, ResourceConfig cfg) {
-    return new RestServiceTestEnv(UrlSupport.url(baseUrl), some(cfg));
-  }
-
-  public static RestServiceTestEnv testEnvForCustomConfig(URL baseUrl, ResourceConfig cfg) {
-    return new RestServiceTestEnv(baseUrl, some(cfg));
-  }
-
-  /**
-   * Return a localhost base URL with a random port between 8081 and 9000. The method features a port usage detection to
-   * ensure it returns a free port.
-   */
-  public static URL localhostRandomPort() {
-    for (int tries = 100; tries > 0; tries--) {
-      final URL url = UrlSupport.url("http", "localhost", 8081 + new Random(System.currentTimeMillis()).nextInt(919));
-      try {
-        final URLConnection con = url.openConnection();
-        con.setConnectTimeout(1000);
-        con.setReadTimeout(1000);
-        con.getInputStream();
-      } catch (IOException e) {
-        return url;
-      }
-    }
-    throw new RuntimeException("Cannot find free port. Giving up.");
+  public static RestServiceTestEnv testEnvForClasses(Class<?>... restServices) {
+    return new RestServiceTestEnv(new ResourceConfig(restServices));
   }
 
   /** Create a URL suitable for rest-assured's post(), get() e.al. methods. */
   public String host(String path) {
+    if (baseUrl == null) {
+      throw new RuntimeException("Server not yet started");
+    }
     return UrlSupport.url(baseUrl, path).toString();
-  }
-
-  /** Return the port the configured server is running on. */
-  public int getPort() {
-    return baseUrl.getPort();
   }
 
   /**
@@ -169,15 +118,26 @@ public final class RestServiceTestEnv {
    */
   public void setUpServer() {
     try {
-      // cut of any base pathbasestUrl might have
-      int port = baseUrl.getPort();
-      logger.info("Start http server at port " + port);
-      hs = new Server(port);
-      ServletContainer servletContainer = cfg.isSome() ? new ServletContainer(cfg.get()) : new ServletContainer();
-      ServletHolder jerseyServlet = new ServletHolder(servletContainer);
-      ServletContextHandler context = new ServletContextHandler(hs, "/");
-      context.addServlet(jerseyServlet, "/*");
-      hs.start();
+      for (int tries = 100; tries > 0; tries--) {
+        try {
+          final int port = 3000 + tries + ThreadLocalRandom.current().nextInt(62000);
+          logger.error("Start http server at port {}", port);
+          server = new Server(port);
+          ServletContainer servletContainer = new ServletContainer(cfg);
+          ServletHolder jerseyServlet = new ServletHolder(servletContainer);
+          ServletContextHandler context = new ServletContextHandler(server, "/");
+          context.addServlet(jerseyServlet, "/*");
+          server.start();
+          baseUrl = UrlSupport.url("http", "127.0.0.1", port);
+          return;
+        } catch (BindException e) {
+          // Rethrow exception after last try
+          if (tries == 1) {
+            throw e;
+          }
+          Thread.sleep(100);
+        }
+      }
     } catch (Exception e) {
       chuck(e);
     }
@@ -185,44 +145,14 @@ public final class RestServiceTestEnv {
 
   /** Call in @AfterClass annotated method. */
   public void tearDownServer() {
-    if (hs != null) {
+    if (server != null) {
       logger.info("Stop http server");
       try {
-        hs.stop();
+        server.stop();
       } catch (Exception e) {
         logger.warn("Stop http server - failed {}", e.getMessage());
       }
     }
   }
 
-  private static final Function<Package, String> pkgName = new Function<Package, String>() {
-    @Override
-    public String apply(Package pkg) {
-      return pkg.getName();
-    }
-  };
-
-  // Hamcrest matcher
-
-  public static class RegexMatcher extends BaseMatcher<String> {
-    private final Pattern p;
-
-    public RegexMatcher(String pattern) {
-      p = Pattern.compile(pattern);
-    }
-
-    public static RegexMatcher regex(String pattern) {
-      return new RegexMatcher(pattern);
-    }
-
-    @Override
-    public boolean matches(Object item) {
-      return item != null && p.matcher(item.toString()).matches();
-    }
-
-    @Override
-    public void describeTo(Description description) {
-      description.appendText("regex [" + p.pattern() + "]");
-    }
-  }
 }

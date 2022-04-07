@@ -59,7 +59,9 @@ import java.nio.file.StandardCopyOption;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 
 import javax.management.ObjectInstance;
@@ -85,6 +87,12 @@ public class WorkingFileRepositoryImpl implements WorkingFileRepository, PathMap
 
   /** Working file repository JMX type */
   private static final String JMX_WORKING_FILE_REPOSITORY_TYPE = "WorkingFileRepository";
+  /** Configuration key for garbage collection period. */
+  public static final String WORKING_FILE_REPOSITORY_CLEANUP_PERIOD_KEY = "org.opencastproject.working.file.repository.cleanup.period";
+  /** Configuration key for garbage collection max age. */
+  public static final String WORKING_FILE_REPOSITORY_CLEANUP_MAX_AGE_KEY = "org.opencastproject.working.file.repository.cleanup.max.age";
+  /** Configuration key for collections to clean up. */
+  private static final String WORKING_FILE_REPOSITORY_CLEANUP_COLLECTIONS_KEY = "org.opencastproject.working.file.repository.cleanup.collections";
 
   /** The JMX working file repository bean */
   private WorkingFileRepositoryBean workingFileRepositoryBean = new WorkingFileRepositoryBean(this);
@@ -106,6 +114,9 @@ public class WorkingFileRepositoryImpl implements WorkingFileRepository, PathMap
 
   /** The security service to get current organization from */
   protected SecurityService securityService;
+
+  /** The working file repository cleaner */
+  private WorkingFileRepositoryCleaner workingFileRepositoryCleaner;
 
   /**
    * Activate the component
@@ -141,6 +152,46 @@ public class WorkingFileRepositoryImpl implements WorkingFileRepository, PathMap
 
     registeredMXBean = JmxUtil.registerMXBean(workingFileRepositoryBean, JMX_WORKING_FILE_REPOSITORY_TYPE);
 
+    // Determine garbage collection period
+    int garbageCollectionPeriodInSeconds = -1;
+    String period = StringUtils.trimToNull(
+            cc.getBundleContext().getProperty(WORKING_FILE_REPOSITORY_CLEANUP_PERIOD_KEY));
+    if (period != null) {
+      try {
+        garbageCollectionPeriodInSeconds = Integer.parseInt(period);
+      } catch (NumberFormatException e) {
+        logger.error("The garbage collection period for the working file repository is not an integer {}", period);
+        throw e;
+      }
+    }
+
+    // Determine the max age of garbage collection entries
+    int maxAgeInDays = -1;
+    String age = StringUtils.trimToNull(cc.getBundleContext().getProperty(WORKING_FILE_REPOSITORY_CLEANUP_MAX_AGE_KEY));
+    if (age != null) {
+      try {
+        maxAgeInDays = Integer.parseInt(age);
+      } catch (NumberFormatException e) {
+        logger.error("The max age for the working file repository garbage collection is not an integer {}", age);
+        throw e;
+      }
+    }
+
+    // Determine which collections should be garbage collected
+    List<String> collectionsToCleanUp = null;
+    String collectionsToCleanUpStr = StringUtils.trimToNull(
+            cc.getBundleContext().getProperty(WORKING_FILE_REPOSITORY_CLEANUP_COLLECTIONS_KEY));
+    if (collectionsToCleanUpStr != null) {
+      collectionsToCleanUp = Arrays.asList(collectionsToCleanUpStr.split("\\s*,\\s*"));
+    }
+
+    // Start cleanup scheduler if we have sensible cleanup values:
+    if (garbageCollectionPeriodInSeconds > 0 && maxAgeInDays > 0 && collectionsToCleanUp != null) {
+      workingFileRepositoryCleaner = new WorkingFileRepositoryCleaner(this,
+              garbageCollectionPeriodInSeconds, maxAgeInDays, collectionsToCleanUp);
+      workingFileRepositoryCleaner.schedule();
+    }
+
     logger.info(getDiskSpace());
   }
 
@@ -149,6 +200,9 @@ public class WorkingFileRepositoryImpl implements WorkingFileRepository, PathMap
    */
   public void deactivate() {
     JmxUtil.unregisterMXBean(registeredMXBean);
+    if (workingFileRepositoryCleaner != null) {
+      workingFileRepositoryCleaner.shutdown();
+    }
   }
 
   /**
@@ -374,26 +428,6 @@ public class WorkingFileRepositoryImpl implements WorkingFileRepository, PathMap
   }
 
   /**
-   * Creates a file containing the md5 hash for the contents of a source file.
-   *
-   * @param is
-   *         the input stream containing the data to hash
-   * @throws IOException
-   *         if the hash cannot be created
-   */
-  protected String createMd5(InputStream is) throws IOException {
-    File md5File = null;
-    try {
-      return DigestUtils.md5Hex(is);
-    } catch (IOException e) {
-      FileUtils.deleteQuietly(md5File);
-      throw e;
-    } finally {
-      IOUtils.closeQuietly(is);
-    }
-  }
-
-  /**
    * Gets the file handle for an md5 associated with a content file. Calling this method and obtaining a File handle is
    * not a guarantee that the md5 file exists.
    *
@@ -542,12 +576,6 @@ public class WorkingFileRepositoryImpl implements WorkingFileRepository, PathMap
       FileUtils.forceMkdir(f);
   }
 
-  /**
-   * {@inheritDoc}
-   *
-   * @see org.opencastproject.workingfilerepository.api.WorkingFileRepository#getCollectionSize(java.lang.String)
-   */
-  @Override
   public long getCollectionSize(String id) throws NotFoundException {
     File collectionDir = null;
     try {
@@ -563,13 +591,6 @@ public class WorkingFileRepositoryImpl implements WorkingFileRepository, PathMap
     return files.length;
   }
 
-  /**
-   * {@inheritDoc}
-   *
-   * @see org.opencastproject.workingfilerepository.api.WorkingFileRepository#getFromCollection(java.lang.String,
-   * java.lang.String)
-   */
-  @Override
   public InputStream getFromCollection(String collectionId, String fileName) throws NotFoundException, IOException {
     File f = getFileFromCollection(collectionId, fileName);
     if (f == null || !f.isFile()) {
@@ -643,13 +664,6 @@ public class WorkingFileRepositoryImpl implements WorkingFileRepository, PathMap
     return getCollectionURI(collectionId, fileName);
   }
 
-  /**
-   * {@inheritDoc}
-   *
-   * @see org.opencastproject.workingfilerepository.api.WorkingFileRepository#copyTo(java.lang.String, java.lang.String,
-   * java.lang.String, java.lang.String, java.lang.String)
-   */
-  @Override
   public URI copyTo(String fromCollection, String fromFileName, String toMediaPackage, String toMediaPackageElement,
                     String toFileName) throws NotFoundException, IOException {
     File source = getFileFromCollection(fromCollection, fromFileName);
@@ -814,16 +828,6 @@ public class WorkingFileRepositoryImpl implements WorkingFileRepository, PathMap
     if (f == null)
       throw new NotFoundException(mediaPackageID + "/" + mediaPackageElementID);
     return getFileDigest(f);
-  }
-
-  /**
-   * Returns the md5 hash value for the given collection element.
-   *
-   * @throws NotFoundException
-   *         if the collection element does not exist
-   */
-  String getCollectionElementDigest(String collectionId, String fileName) throws IOException, NotFoundException {
-    return getFileDigest(getFileFromCollection(collectionId, fileName));
   }
 
   /**

@@ -30,7 +30,6 @@ import static javax.servlet.http.HttpServletResponse.SC_NO_CONTENT;
 import static javax.servlet.http.HttpServletResponse.SC_OK;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.opencastproject.test.rest.RestServiceTestEnv.localhostRandomPort;
 import static org.opencastproject.test.rest.RestServiceTestEnv.testEnvForClasses;
 
 import org.opencastproject.test.rest.RestServiceTestEnv;
@@ -42,9 +41,11 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import io.restassured.http.ContentType;
+
 public class WorkflowsEndpointTest {
 
-  private static final RestServiceTestEnv env = testEnvForClasses(localhostRandomPort(), TestWorkflowsEndpoint.class);
+  private static final RestServiceTestEnv env = testEnvForClasses(TestWorkflowsEndpoint.class);
 
   private static final JSONParser parser = new JSONParser();
 
@@ -279,6 +280,7 @@ public class WorkflowsEndpointTest {
     final String response = given().pathParam("workflowInstanceId", RUNNING_WORKFLOW_ID)
                                    .queryParam("withoperations", "true")
                                    .queryParam("withconfiguration", "true")
+                                   .contentType(ContentType.URLENC)
                                    .expect()
                                    .statusCode(SC_OK)
                                    .when()
@@ -328,7 +330,7 @@ public class WorkflowsEndpointTest {
 
   @Test
   public void testPutWorkflowWithUnauthorizedWorkflow() {
-    given().pathParam("workflowInstanceId", UNAUTHORIZED_WORKFLOW_ID)
+    given().pathParam("workflowInstanceId", UNAUTHORIZED_WORKFLOW_ID).contentType(ContentType.URLENC)
            .expect()
            .statusCode(SC_FORBIDDEN)
            .when()
@@ -337,7 +339,7 @@ public class WorkflowsEndpointTest {
 
   @Test
   public void testPutWorkflowWithMissingWorkflow() {
-    given().pathParam("workflowInstanceId", MISSING_WORKFLOW_ID)
+    given().pathParam("workflowInstanceId", MISSING_WORKFLOW_ID).contentType(ContentType.URLENC)
            .expect()
            .statusCode(SC_NOT_FOUND)
            .when()

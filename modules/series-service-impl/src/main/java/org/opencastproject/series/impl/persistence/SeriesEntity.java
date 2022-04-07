@@ -22,6 +22,7 @@
 package org.opencastproject.series.impl.persistence;
 
 import java.util.Collections;
+import java.util.Date;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -35,12 +36,16 @@ import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
 import javax.persistence.IdClass;
+import javax.persistence.Index;
 import javax.persistence.JoinColumn;
 import javax.persistence.Lob;
 import javax.persistence.MapKeyColumn;
 import javax.persistence.NamedQueries;
 import javax.persistence.NamedQuery;
 import javax.persistence.Table;
+import javax.persistence.Temporal;
+import javax.persistence.TemporalType;
+import javax.persistence.UniqueConstraint;
 
 /**
  * Enitity object for storing series in persistence storage. Series ID is stored as primary key, DUBLIN_CORE field is
@@ -48,14 +53,40 @@ import javax.persistence.Table;
  * rules.
  *
  */
-@Entity(name = "SeriesEntity") @IdClass(SeriesEntityId.class)
+@Entity(name = "SeriesEntity")
+@IdClass(SeriesEntityId.class)
 @Access(AccessType.FIELD)
-@Table(name = "oc_series")
+@Table(name = "oc_series",
+    indexes = {
+        @Index(name = "IX_oc_series_modified_date", columnList = ("modified_date")),
+    }
+)
 @NamedQueries({
-        @NamedQuery(name = "Series.findAll", query = "select s from SeriesEntity s"),
-        @NamedQuery(name = "Series.getCount", query = "select COUNT(s) from SeriesEntity s"),
-        @NamedQuery(name = "seriesById", query = "select s from SeriesEntity as s where s.seriesId=:seriesId and s.organization=:organization"),
-        @NamedQuery(name = "allSeriesInOrg", query = "select s from SeriesEntity as s where s.organization=:organization") })
+    @NamedQuery(
+        name = "Series.findAll",
+        query = "select s from SeriesEntity s where s.deletionDate is null"
+    ),
+    @NamedQuery(
+        name = "Series.getCount",
+        query = "select COUNT(s) from SeriesEntity s where s.deletionDate is null"
+    ),
+    @NamedQuery(
+        name = "seriesById",
+        query = "select s from SeriesEntity as s where s.seriesId=:seriesId and s.organization=:organization"
+    ),
+    @NamedQuery(
+        name = "Series.getAllModifiedSince",
+        query = "select s from SeriesEntity as s "
+            + "where s.modifiedDate >= :since and s.organization=:organization "
+            + "order by s.modifiedDate asc"
+    ),
+    @NamedQuery(
+        name = "Series.getAllModifiedInRange",
+        query = "select s from SeriesEntity as s "
+            + "where s.modifiedDate >= :from and s.modifiedDate < :to and s.organization=:organization "
+            + "order by s.modifiedDate asc"
+    ),
+})
 public class SeriesEntity {
 
   /** Series ID, primary key */
@@ -79,20 +110,33 @@ public class SeriesEntity {
   @Column(name = "access_control", length = 65535)
   protected String accessControl;
 
+  @Column(name = "modified_date", nullable = false)
+  @Temporal(TemporalType.TIMESTAMP)
+  protected Date modifiedDate = new Date();
+
+  @Column(name = "deletion_date")
+  @Temporal(TemporalType.TIMESTAMP)
+  protected Date deletionDate = null;
+
+  @Lob
   @ElementCollection(targetClass = String.class)
-  @MapKeyColumn(name = "name")
-  @Column(name = "value")
-  @CollectionTable(name = "oc_series_property", joinColumns = {
-          @JoinColumn(name = "series", referencedColumnName = "id"),
-          @JoinColumn(name = "organization", referencedColumnName = "organization") })
+  @MapKeyColumn(name = "name", nullable = false)
+  @Column(name = "value", length = 65535)
+  @CollectionTable(name = "oc_series_property", uniqueConstraints = {
+      @UniqueConstraint(name = "UNQ_series_properties", columnNames = {"series", "organization", "name"})
+      }, joinColumns = {
+          @JoinColumn(name = "series", referencedColumnName = "id", nullable = false),
+          @JoinColumn(name = "organization", referencedColumnName = "organization", nullable = false) })
   protected Map<String, String> properties;
 
   @ElementCollection
-  @MapKeyColumn(name = "type")
+  @MapKeyColumn(name = "type", length = 128, nullable = false)
   @Column(name = "data")
-  @CollectionTable(name = "oc_series_elements", joinColumns = {
-          @JoinColumn(name = "series", referencedColumnName = "id"),
-          @JoinColumn(name = "organization", referencedColumnName = "organization") })
+  @CollectionTable(name = "oc_series_elements", uniqueConstraints = {
+      @UniqueConstraint(name = "UNQ_series_elements", columnNames = {"series", "organization", "type"})
+      }, joinColumns = {
+      @JoinColumn(name = "series", referencedColumnName = "id", nullable = false),
+      @JoinColumn(name = "organization", referencedColumnName = "organization", nullable = false) })
   protected Map<String, byte[]> elements;
 
   /**
@@ -116,10 +160,12 @@ public class SeriesEntity {
    * @param seriesId
    */
   public void setSeriesId(String seriesId) {
-    if (seriesId == null)
+    if (seriesId == null) {
       throw new IllegalArgumentException("Series id can't be null");
-    if (seriesId.length() > 128)
+    }
+    if (seriesId.length() > 128) {
       throw new IllegalArgumentException("Series id can't be longer than 128 characters");
+    }
     this.seriesId = seriesId;
   }
 
@@ -174,6 +220,26 @@ public class SeriesEntity {
    */
   public void setOrganization(String organization) {
     this.organization = organization;
+  }
+
+  public Date getModifiedDate() {
+    return this.modifiedDate;
+  }
+
+  public void setModifiedDate(Date date) {
+    this.modifiedDate = date;
+  }
+
+  public Date getDeletionDate() {
+    return this.deletionDate;
+  }
+
+  public void setDeletionDate(Date date) {
+    this.deletionDate = date;
+  }
+
+  public boolean isDeleted() {
+    return this.deletionDate != null;
   }
 
   public Map<String, String> getProperties() {

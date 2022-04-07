@@ -32,6 +32,9 @@ import org.opencastproject.security.api.RoleProvider;
 import org.opencastproject.security.api.SecurityService;
 import org.opencastproject.security.api.UserProvider;
 
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -42,6 +45,13 @@ import java.util.regex.Pattern;
 /**
  * The organization role provider returning the admin and anonymous role from the current organization.
  */
+@Component(
+    property = {
+        "service.description=Provides the organizations role"
+    },
+    immediate = true,
+    service = { RoleProvider.class }
+)
 public class OrganizationRoleProvider implements RoleProvider {
 
   /** The security service */
@@ -51,6 +61,7 @@ public class OrganizationRoleProvider implements RoleProvider {
    * @param securityService
    *          the securityService to set
    */
+  @Reference(name = "security-service")
   public void setSecurityService(SecurityService securityService) {
     this.securityService = securityService;
   }
@@ -60,9 +71,19 @@ public class OrganizationRoleProvider implements RoleProvider {
     List<Role> roles = new ArrayList<Role>();
     // The GLOBAL_ADMIN_ROLE is provided by the InMemoryUserAndRoleProvider
     if (!GLOBAL_ADMIN_ROLE.equals(organization.getAdminRole())) {
-      roles.add(new JaxbRole(organization.getAdminRole(), JaxbOrganization.fromOrganization(organization), "", Type.INTERNAL));
+      roles.add(new JaxbRole(
+          organization.getAdminRole(),
+          JaxbOrganization.fromOrganization(organization),
+          "",
+          Type.INTERNAL
+      ));
     }
-    roles.add(new JaxbRole(organization.getAnonymousRole(), JaxbOrganization.fromOrganization(organization), "", Type.SYSTEM));
+    roles.add(new JaxbRole(
+        organization.getAnonymousRole(),
+        JaxbOrganization.fromOrganization(organization),
+        "",
+        Type.SYSTEM
+    ));
     return roles.iterator();
   }
 
@@ -87,17 +108,20 @@ public class OrganizationRoleProvider implements RoleProvider {
    */
   @Override
   public Iterator<Role> findRoles(String query, Role.Target target, int offset, int limit) {
-    if (query == null)
+    if (query == null) {
       throw new IllegalArgumentException("Query must be set");
+    }
     Organization organization = securityService.getOrganization();
     HashSet<Role> foundRoles = new HashSet<Role>();
     for (Iterator<Role> it = getRoles(); it.hasNext();) {
       Role role = it.next();
       // Anonymous roles are not relevant for adding to users or groups
-      if ((target == Role.Target.USER) && role.getName().equals(organization.getAnonymousRole()))
+      if ((target == Role.Target.USER) && role.getName().equals(organization.getAnonymousRole())) {
         continue;
-      if (like(role.getName(), query) || like(role.getDescription(), query))
+      }
+      if (like(role.getName(), query) || like(role.getDescription(), query)) {
         foundRoles.add(role);
+      }
     }
     return offsetLimitCollection(offset, limit, foundRoles).iterator();
   }
@@ -106,10 +130,12 @@ public class OrganizationRoleProvider implements RoleProvider {
     HashSet<T> result = new HashSet<T>();
     int i = 0;
     for (T entry : entries) {
-      if (limit != 0 && result.size() >= limit)
+      if (limit != 0 && result.size() >= limit) {
         break;
-      if (i >= offset)
+      }
+      if (i >= offset) {
         result.add(entry);
+      }
       i++;
     }
     return result;

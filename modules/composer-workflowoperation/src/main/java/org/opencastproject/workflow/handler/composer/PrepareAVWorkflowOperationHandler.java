@@ -33,6 +33,7 @@ import org.opencastproject.mediapackage.MediaPackageException;
 import org.opencastproject.mediapackage.Track;
 import org.opencastproject.util.NotFoundException;
 import org.opencastproject.workflow.api.AbstractWorkflowOperationHandler;
+import org.opencastproject.workflow.api.ConfiguredTagsAndFlavors;
 import org.opencastproject.workflow.api.WorkflowInstance;
 import org.opencastproject.workflow.api.WorkflowOperationException;
 import org.opencastproject.workflow.api.WorkflowOperationInstance;
@@ -46,28 +47,29 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.List;
 
 /**
- * The <tt>prepare media</tt> operation will make sure that media where audio and video track come in separate files
+ * The <code>prepare media</code> operation will make sure that media where audio and video track come in separate files
  * will be muxed prior to further processing.
  */
 public class PrepareAVWorkflowOperationHandler extends AbstractWorkflowOperationHandler {
 
   /** The logging facility */
-  private static final Logger logger = LoggerFactory.getLogger(ComposeWorkflowOperationHandler.class);
+  private static final Logger logger = LoggerFactory.getLogger(PrepareAVWorkflowOperationHandler.class);
   private static final String QUESTION_MARK = "?";
 
   /** Name of the 'encode to a/v prepared copy' encoding profile */
-  public static final String PREPARE_AV_PROFILE = "av.prepared";
+  public static final String PREPARE_AV_PROFILE = "av.copy";
 
   /** Name of the muxing encoding profile */
-  public static final String MUX_AV_PROFILE = "mux-av.prepared";
+  public static final String MUX_AV_PROFILE = "mux-av.copy";
 
   /** Name of the 'encode to audio only prepared copy' encoding profile */
-  public static final String PREPARE_AONLY_PROFILE = "audio-only.prepared";
+  public static final String PREPARE_AONLY_PROFILE = "audio-only.copy";
 
   /** Name of the 'encode to video only prepared copy' encoding profile */
-  public static final String PREPARE_VONLY_PROFILE = "video-only.prepared";
+  public static final String PREPARE_VONLY_PROFILE = "video-only.copy";
 
   /** Name of the 'rewrite' configuration key */
   public static final String OPT_REWRITE = "rewrite";
@@ -112,7 +114,7 @@ public class PrepareAVWorkflowOperationHandler extends AbstractWorkflowOperation
           throws WorkflowOperationException {
     try {
       logger.debug("Running a/v muxing workflow operation on workflow {}", workflowInstance.getId());
-      return mux(workflowInstance.getMediaPackage(), workflowInstance.getCurrentOperation());
+      return mux(workflowInstance);
     } catch (Exception e) {
       throw new WorkflowOperationException(e);
     }
@@ -122,10 +124,8 @@ public class PrepareAVWorkflowOperationHandler extends AbstractWorkflowOperation
    * Merges audio and video track of the selected flavor and adds it to the media package. If there is nothing to mux, a
    * new track with the target flavor is created (pointing to the original url).
    *
-   * @param src
-   *          The source media package
-   * @param operation
-   *          the mux workflow operation
+   * @param wi
+   *          the mux workflow instance
    * @return the operation result containing the updated mediapackage
    * @throws EncoderException
    *           if encoding fails
@@ -134,30 +134,26 @@ public class PrepareAVWorkflowOperationHandler extends AbstractWorkflowOperation
    * @throws NotFoundException
    *           if the workspace does not contain the requested element
    */
-  private WorkflowOperationResult mux(MediaPackage src, WorkflowOperationInstance operation) throws EncoderException,
+  private WorkflowOperationResult mux(WorkflowInstance wi) throws EncoderException,
           WorkflowOperationException, NotFoundException, MediaPackageException, IOException {
+    MediaPackage src = wi.getMediaPackage();
     MediaPackage mediaPackage = (MediaPackage) src.clone();
+    WorkflowOperationInstance operation = wi.getCurrentOperation();
+
+    // Check which tags have been configured
+    ConfiguredTagsAndFlavors tagsAndFlavors = getTagsAndFlavors(wi,
+        Configuration.none, Configuration.one, Configuration.many, Configuration.one);
 
     // Read the configuration properties
-    String sourceFlavorName = StringUtils.trimToNull(operation.getConfiguration("source-flavor"));
-    String targetTrackTags = StringUtils.trimToNull(operation.getConfiguration("target-tags"));
-    String targetTrackFlavorName = StringUtils.trimToNull(operation.getConfiguration("target-flavor"));
+    MediaPackageElementFlavor sourceFlavor = tagsAndFlavors.getSingleSrcFlavor();
+    List<String> targetTrackTags = tagsAndFlavors.getTargetTags();
+    MediaPackageElementFlavor targetFlavor = tagsAndFlavors.getSingleTargetFlavor();
     String muxEncodingProfileName = StringUtils.trimToNull(operation.getConfiguration("mux-encoding-profile"));
     String audioVideoEncodingProfileName = StringUtils.trimToNull(operation.getConfiguration("audio-video-encoding-profile"));
     String videoOnlyEncodingProfileName = StringUtils.trimToNull(operation.getConfiguration("video-encoding-profile"));
     String audioOnlyEncodingProfileName = StringUtils.trimToNull(operation.getConfiguration("audio-encoding-profile"));
 
     final WorkflowOperationTagUtil.TagDiff tagDiff = WorkflowOperationTagUtil.createTagDiff(targetTrackTags);
-
-    // Make sure the source flavor is properly set
-    if (sourceFlavorName == null)
-      throw new IllegalStateException("Source flavor must be specified");
-    MediaPackageElementFlavor sourceFlavor = MediaPackageElementFlavor.parseFlavor(sourceFlavorName);
-
-    // Make sure the target flavor is properly set
-    if (targetTrackFlavorName == null)
-      throw new IllegalStateException("Target flavor must be specified");
-    MediaPackageElementFlavor targetFlavor = MediaPackageElementFlavor.parseFlavor(targetTrackFlavorName);
 
     // Reencode when there is no need for muxing?
     boolean rewrite = true;

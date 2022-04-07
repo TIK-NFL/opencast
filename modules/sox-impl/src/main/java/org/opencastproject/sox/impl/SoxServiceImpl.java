@@ -29,8 +29,7 @@ import org.opencastproject.mediapackage.AudioStream;
 import org.opencastproject.mediapackage.MediaPackageElementParser;
 import org.opencastproject.mediapackage.MediaPackageException;
 import org.opencastproject.mediapackage.Track;
-import org.opencastproject.mediapackage.identifier.IdBuilder;
-import org.opencastproject.mediapackage.identifier.IdBuilderFactory;
+import org.opencastproject.mediapackage.identifier.IdImpl;
 import org.opencastproject.mediapackage.track.AudioStreamImpl;
 import org.opencastproject.mediapackage.track.TrackImpl;
 import org.opencastproject.security.api.OrganizationDirectoryService;
@@ -110,9 +109,6 @@ public class SoxServiceImpl extends AbstractJobProducer implements SoxService, M
 
   /** Reference to the receipt service */
   private ServiceRegistry serviceRegistry;
-
-  /** Id builder used to create ids for encoded tracks */
-  private final IdBuilder idBuilder = IdBuilderFactory.newInstance().newIdBuilder();
 
   /** The security service */
   protected SecurityService securityService = null;
@@ -220,10 +216,12 @@ public class SoxServiceImpl extends AbstractJobProducer implements SoxService, M
   }
 
   protected Option<Track> analyze(Job job, Track audioTrack) throws SoxException {
-    if (!audioTrack.hasAudio())
+    if (!audioTrack.hasAudio()) {
       throw new SoxException("No audio stream available");
-    if (audioTrack.hasVideo())
+    }
+    if (audioTrack.hasVideo()) {
       throw new SoxException("It must not have a video stream");
+    }
 
     try {
       // Get the tracks and make sure they exist
@@ -270,8 +268,9 @@ public class SoxServiceImpl extends AbstractJobProducer implements SoxService, M
     }
 
     AudioStreamImpl audioStream = (AudioStreamImpl) audio.get(0);
-    if (audio.size() > 1)
+    if (audio.size() > 1) {
       logger.info("Multiple audio streams found, take first audio stream {}", audioStream);
+    }
 
     for (String value : metadata) {
       if (value.startsWith("Pk lev dB")) {
@@ -304,8 +303,9 @@ public class SoxServiceImpl extends AbstractJobProducer implements SoxService, M
         logger.info(line);
         stats.add(line);
       }
-      if (process.exitValue() != 0)
+      if (process.exitValue() != 0) {
         throw new SoxException("Sox process failed with error code: " + process.exitValue());
+      }
       logger.info("Sox process finished");
       return stats;
     } catch (IOException e) {
@@ -318,16 +318,20 @@ public class SoxServiceImpl extends AbstractJobProducer implements SoxService, M
   }
 
   private Option<Track> normalize(Job job, TrackImpl audioTrack, Float targetRmsLevDb) throws SoxException {
-    if (!audioTrack.hasAudio())
+    if (!audioTrack.hasAudio()) {
       throw new SoxException("No audio stream available");
-    if (audioTrack.hasVideo())
+    }
+    if (audioTrack.hasVideo()) {
       throw new SoxException("It must not have a video stream");
-    if (audioTrack.getAudio().size() < 1)
+    }
+    if (audioTrack.getAudio().size() < 1) {
       throw new SoxException("No audio stream metadata available");
-    if (audioTrack.getAudio().get(0).getRmsLevDb() == null)
+    }
+    if (audioTrack.getAudio().get(0).getRmsLevDb() == null) {
       throw new SoxException("No RMS Lev dB metadata available");
+    }
 
-    final String targetTrackId = idBuilder.createNew().toString();
+    final String targetTrackId = IdImpl.fromUUID().toString();
 
     Float rmsLevDb = audioTrack.getAudio().get(0).getRmsLevDb();
 
@@ -357,15 +361,17 @@ public class SoxServiceImpl extends AbstractJobProducer implements SoxService, M
     command.add("remix");
     command.add("-");
     command.add("gain");
-    if (targetRmsLevDb > rmsLevDb)
+    if (targetRmsLevDb > rmsLevDb) {
       command.add("-l");
+    }
     command.add(new Float(targetRmsLevDb - rmsLevDb).toString());
     command.add("stats");
 
     List<String> normalizeResult = launchSoxProcess(command);
 
-    if (normalizedFile.length() == 0)
+    if (normalizedFile.length() == 0) {
       throw new SoxException("Normalization failed: Output file is empty!");
+    }
 
     // Put the file in the workspace
     URI returnURL = null;

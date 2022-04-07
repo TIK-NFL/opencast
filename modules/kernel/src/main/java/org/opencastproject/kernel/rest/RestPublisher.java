@@ -33,7 +33,6 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.cxf.Bus;
 import org.apache.cxf.binding.BindingFactoryManager;
 import org.apache.cxf.endpoint.Server;
@@ -478,15 +477,16 @@ public class RestPublisher implements RestConstants {
       String classpath = bundle.getHeaders().get(RestConstants.HTTP_CLASSPATH);
       String alias = bundle.getHeaders().get(RestConstants.HTTP_ALIAS);
       String welcomeFile = bundle.getHeaders().get(RestConstants.HTTP_WELCOME);
+      // Always false if not set to true
+      boolean spaRedirect = Boolean.parseBoolean(bundle.getHeaders().get(RestConstants.HTTP_SPA_REDIRECT));
 
       if (classpath != null && alias != null) {
         Dictionary<String, String> props = new Hashtable<>();
         props.put(SharedHttpContext.ALIAS, alias);
         props.put(SharedHttpContext.CONTEXT_ID, RestConstants.HTTP_CONTEXT_ID);
         props.put(SharedHttpContext.SHARED, "true");
-
         StaticResource servlet = new StaticResource(new StaticResourceClassLoader(bundle), classpath, alias,
-                welcomeFile);
+                welcomeFile, spaRedirect);
 
         // We use the newly added bundle's context to register this service, so when that bundle shuts down, it brings
         // down this servlet with it
@@ -553,7 +553,7 @@ public class RestPublisher implements RestConstants {
         try {
           response.sendRedirect("/docs.html?path=" + request.getServletPath());
         } catch (IOException e) {
-          logger.error("Unable to redirect to rest docs: {}", ExceptionUtils.getStackTrace(e));
+          logger.error("Unable to redirect to rest docs:", e);
         }
       } else {
         super.handleRequest(request, response);

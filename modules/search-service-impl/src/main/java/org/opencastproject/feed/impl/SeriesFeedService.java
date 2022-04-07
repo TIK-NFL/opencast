@@ -35,6 +35,7 @@ import org.opencastproject.search.api.SearchResult;
 import org.opencastproject.search.api.SearchResultImpl;
 import org.opencastproject.search.api.SearchResultItem;
 import org.opencastproject.search.api.SearchResultItemImpl;
+import org.opencastproject.security.api.AccessControlList;
 import org.opencastproject.util.data.Function;
 
 import com.google.common.cache.CacheBuilder;
@@ -45,6 +46,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Date;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
@@ -88,19 +90,22 @@ public class SeriesFeedService extends AbstractFeedService implements FeedGenera
   @Override
   public boolean accept(String[] query) {
     boolean generalChecksPassed = super.accept(query);
-    if (!generalChecksPassed)
+    if (!generalChecksPassed) {
       return false;
+    }
 
     // Build the series id, first parameter is the selector. Note that if the series identifier
     // contained slashes (e. g. in the case of a handle or doi), we need to reassemble the
     // identifier
     StringBuffer sId = new StringBuffer();
     int idparts = query.length - 1;
-    if (idparts < 1)
+    if (idparts < 1) {
       return false;
+    }
     for (int i = 1; i <= idparts; i++) {
-      if (sId.length() > 0)
+      if (sId.length() > 0) {
         sId.append("/");
+      }
       sId.append(query[i]);
     }
 
@@ -113,8 +118,9 @@ public class SeriesFeedService extends AbstractFeedService implements FeedGenera
       // Check the series service to see if the series exists
       // but has not yet had anything published from it
       Object result = seriesCache.getUnchecked(seriesId);
-      if (result == nullToken)
+      if (result == nullToken) {
         return false;
+      }
 
       SearchResult searchResult = (SearchResult) result;
       seriesData.set(searchResult);
@@ -220,7 +226,7 @@ public class SeriesFeedService extends AbstractFeedService implements FeedGenera
         SearchResultImpl artificialResult = new SearchResultImpl();
 
         // Response either finds the one series or nothing at all
-        artificialResult.setLimit(1);
+        artificialResult.setLimit(Optional.of(1L));
         artificialResult.setOffset(0);
         artificialResult.setTotal(1);
 
@@ -238,6 +244,11 @@ public class SeriesFeedService extends AbstractFeedService implements FeedGenera
 
           @Override
           public MediaPackage getMediaPackage() {
+            return null;
+          }
+
+          @Override
+          public AccessControlList getAccessControlList() {
             return null;
           }
 
@@ -368,6 +379,11 @@ public class SeriesFeedService extends AbstractFeedService implements FeedGenera
 
           @Override
           public Date getModified() {
+            return null;
+          }
+
+          @Override
+          public Date getDeletionDate() {
             return null;
           }
 

@@ -23,6 +23,7 @@
 package org.opencastproject.mediapackage;
 
 import org.opencastproject.mediapackage.identifier.Id;
+import org.opencastproject.util.XmlSafeParser;
 
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
@@ -36,7 +37,6 @@ import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 
-import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpressionException;
@@ -102,17 +102,15 @@ public class MediaPackageBuilderImpl implements MediaPackageBuilder {
    * @see org.opencastproject.mediapackage.MediaPackageBuilder#loadFromXml(java.io.InputStream)
    */
   public MediaPackage loadFromXml(InputStream is) throws MediaPackageException {
-    if (serializer != null) {
-      // FIXME This code runs if *any* serializer is present, regardless of the serializer implementation
-      try {
-        Document xml = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(is);
+    try {
+      Document xml = XmlSafeParser.parse(is);
+      if (serializer != null) {
+        //Convert InputStream to XML document to rewrite the URLs
         rewriteUrls(xml, serializer);
-        return MediaPackageImpl.valueOf(xml);
-      } catch (Exception e) {
-        throw new MediaPackageException("Error deserializing paths in media package", e);
       }
-    } else {
-      return MediaPackageImpl.valueOf(is);
+      return loadFromXml(xml);
+    } catch (Exception e) {
+      throw new MediaPackageException("Error deserializing paths in media package", e);
     }
   }
 

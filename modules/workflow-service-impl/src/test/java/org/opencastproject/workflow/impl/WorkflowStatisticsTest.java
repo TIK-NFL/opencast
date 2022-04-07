@@ -25,12 +25,14 @@ import static org.junit.Assert.assertEquals;
 import static org.opencastproject.workflow.impl.SecurityServiceStub.DEFAULT_ORG_ADMIN;
 
 import org.opencastproject.assetmanager.api.AssetManager;
+import org.opencastproject.elasticsearch.api.SearchResult;
+import org.opencastproject.elasticsearch.index.ElasticsearchIndex;
+import org.opencastproject.elasticsearch.index.objects.event.EventSearchQuery;
 import org.opencastproject.mediapackage.DefaultMediaPackageSerializerImpl;
 import org.opencastproject.mediapackage.MediaPackage;
 import org.opencastproject.mediapackage.MediaPackageBuilder;
 import org.opencastproject.mediapackage.MediaPackageBuilderFactory;
-import org.opencastproject.mediapackage.identifier.UUIDIdBuilderImpl;
-import org.opencastproject.message.broker.api.MessageSender;
+import org.opencastproject.mediapackage.identifier.IdImpl;
 import org.opencastproject.metadata.api.MediaPackageMetadataService;
 import org.opencastproject.security.api.AccessControlList;
 import org.opencastproject.security.api.AclScope;
@@ -186,10 +188,6 @@ public class WorkflowStatisticsTest {
     EasyMock.replay(organizationDirectoryService);
     service.setOrganizationDirectoryService(organizationDirectoryService);
 
-    MessageSender messageSender = EasyMock.createNiceMock(MessageSender.class);
-    EasyMock.replay(messageSender);
-    service.setMessageSender(messageSender);
-
     MediaPackageMetadataService mds = EasyMock.createNiceMock(MediaPackageMetadataService.class);
     EasyMock.replay(mds);
     service.addMetadataService(mds);
@@ -228,6 +226,15 @@ public class WorkflowStatisticsTest {
     } catch (Exception e) {
       Assert.fail(e.getMessage());
     }
+
+    SearchResult result = EasyMock.createNiceMock(SearchResult.class);
+
+    final ElasticsearchIndex index = EasyMock.createNiceMock(ElasticsearchIndex.class);
+    EasyMock.expect(index.getIndexName()).andReturn("index").anyTimes();
+    EasyMock.expect(index.getByQuery(EasyMock.anyObject(EventSearchQuery.class))).andReturn(result).anyTimes();
+    EasyMock.replay(result, index);
+
+    service.setIndex(index);
 
     // Register the workflow service with the service registry
     serviceRegistry.registerService(service);
@@ -307,7 +314,7 @@ public class WorkflowStatisticsTest {
     List<WorkflowInstance> instances = new ArrayList<WorkflowInstance>();
     for (WorkflowDefinition def : workflowDefinitions) {
       for (int j = 0; j < def.getOperations().size(); j++) {
-        mediaPackage.setIdentifier(new UUIDIdBuilderImpl().createNew());
+        mediaPackage.setIdentifier(IdImpl.fromUUID());
         instances.add(service.start(def, mediaPackage));
         total++;
         paused++;

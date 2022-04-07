@@ -26,7 +26,6 @@ import static org.opencastproject.assetmanager.api.fn.Enrichments.enrich;
 import org.opencastproject.assetmanager.api.AssetManager;
 import org.opencastproject.assetmanager.api.Snapshot;
 import org.opencastproject.assetmanager.api.query.AQueryBuilder;
-import org.opencastproject.assetmanager.api.query.ASelectQuery;
 import org.opencastproject.mediapackage.MediaPackage;
 import org.opencastproject.workflow.api.ConfiguredWorkflow;
 import org.opencastproject.workflow.api.WorkflowDatabaseException;
@@ -55,13 +54,6 @@ public class Workflows {
   public Workflows(AssetManager am, WorkflowService wfs) {
     this.am = am;
     this.wfs = wfs;
-  }
-
-  /**
-   * Apply a workflow to each episode contained in the result set of a select query.
-   */
-  public Stream<WorkflowInstance> applyWorkflow(ASelectQuery q, ConfiguredWorkflow wf) {
-    return enrich(q.run()).getSnapshots().map(getMediapackage).bind(applyWorkflow(wf));
   }
 
   /**
@@ -99,7 +91,8 @@ public class Workflows {
   private final Fn<String, Iterable<Snapshot>> findLatest = new Fn<String, Iterable<Snapshot>>() {
     @Override public Iterable<Snapshot> apply(String mpId) {
       AQueryBuilder q = am.createQuery();
-      return enrich(q.select(q.snapshot()).where(q.mediaPackageId(mpId).and(q.version().isLatest())).run()).getSnapshots();
+      return enrich(q.select(q.snapshot()).where(q.mediaPackageId(mpId).and(q.version().isLatest())).run())
+          .getSnapshots();
     }
   };
 }

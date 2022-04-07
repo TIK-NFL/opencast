@@ -36,6 +36,9 @@ import org.opencastproject.util.doc.rest.RestService;
 
 import org.apache.commons.lang3.StringUtils;
 import org.osgi.service.component.ComponentContext;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,16 +58,27 @@ import javax.ws.rs.core.Response;
               + "<em>This service is for exclusive use by the module admin-ui. Its API might change "
               + "anytime without prior notice. Any dependencies other than the admin UI will be strictly ignored. "
               + "DO NOT use this for integration of third-party applications.<em>"})
+@Component(
+        immediate = true,
+        service = PresetsEndpoint.class,
+        property = {
+                "service.description=Admin UI - Presets Endpoint",
+                "opencast.service.type=org.opencastproject.adminui.PresetsEndpoint",
+                "opencast.service.path=/admin-ng/presets",
+        }
+)
 public class PresetsEndpoint {
 
   private static final Logger logger = LoggerFactory.getLogger(PresetsEndpoint.class);
   /** A preset provider to get the presets from. */
   private PresetProvider presetProvider;
 
+  @Reference
   public void setPresetProvider(PresetProvider presetProvider) {
     this.presetProvider = presetProvider;
   }
 
+  @Activate
   protected void activate(ComponentContext cc) {
     logger.info("Activate presets endpoint");
   }
@@ -74,7 +88,7 @@ public class PresetsEndpoint {
   @Path("{seriesId}/property/{propertyName}.json")
   @RestQuery(name = "getProperty", description = "Returns a property value if set as a preset", returnDescription = "Returns the property value", pathParameters = {
           @RestParameter(name = "seriesId", description = "ID of series", isRequired = true, type = Type.STRING),
-          @RestParameter(name = "propertyName", description = "Name of the property which is the key for it", isRequired = true, type = Type.STRING) }, reponses = {
+          @RestParameter(name = "propertyName", description = "Name of the property which is the key for it", isRequired = true, type = Type.STRING) }, responses = {
           @RestResponse(responseCode = SC_OK, description = "The access control list."),
           @RestResponse(responseCode = SC_UNAUTHORIZED, description = "If the current user is not authorized to perform this action") })
   public Response getProperty(@PathParam("seriesId") String seriesId, @PathParam("propertyName") String propertyName)

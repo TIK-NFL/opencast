@@ -27,7 +27,6 @@ import org.opencastproject.assetmanager.api.AssetManager;
 import org.opencastproject.authorization.xacml.manager.api.AclServiceFactory;
 import org.opencastproject.security.api.AuthorizationService;
 import org.opencastproject.security.api.SecurityService;
-import org.opencastproject.series.api.SeriesService;
 import org.opencastproject.util.UrlSupport;
 import org.opencastproject.util.data.Tuple;
 import org.opencastproject.util.doc.rest.RestService;
@@ -40,7 +39,12 @@ import javax.ws.rs.Path;
 
 /** REST endpoint for ACL manager. */
 @Path("/")
-@RestService(name = "aclmanager", title = "ACL Manager", abstractText = "This service creates, edits and retrieves and helps managing and scheduling ACL's.", notes = {})
+@RestService(
+    name = "aclmanager",
+    title = "ACL Manager",
+    abstractText = "This service creates, edits, retrieves and helps managing access policies (ACL templates).",
+    notes = {}
+)
 public final class OsgiAclServiceRestEndpoint extends AbstractAclServiceRestEndpoint {
   /** Logging utility */
   private static final Logger logger = LoggerFactory.getLogger(OsgiAclServiceRestEndpoint.class);
@@ -50,7 +54,6 @@ public final class OsgiAclServiceRestEndpoint extends AbstractAclServiceRestEndp
   private AuthorizationService authorizationService;
   private String endpointBaseUrl;
   private AssetManager assetManager;
-  private SeriesService seriesService;
 
   /** OSGi callback. */
   public void activate(ComponentContext cc) {
@@ -84,19 +87,9 @@ public final class OsgiAclServiceRestEndpoint extends AbstractAclServiceRestEndp
     this.assetManager = assetManager;
   }
 
-  /** OSGi DI callback. */
-  public void setSeriesService(SeriesService seriesService) {
-    this.seriesService = seriesService;
-  }
-
   @Override
   protected AclServiceFactory getAclServiceFactory() {
     return aclServiceFactory;
-  }
-
-  @Override
-  protected String getEndpointBaseUrl() {
-    return endpointBaseUrl;
   }
 
   @Override
@@ -105,17 +98,12 @@ public final class OsgiAclServiceRestEndpoint extends AbstractAclServiceRestEndp
   }
 
   @Override
+  protected AssetManager getAssetManager() {
+    return assetManager;
+  }
+
+  @Override
   protected AuthorizationService getAuthorizationService() {
     return authorizationService;
-  }
-
-  @Override
-  protected SeriesService getSeriesService() {
-    return seriesService;
-  }
-
-  @Override
-  public AssetManager getAssetManager() {
-    return assetManager;
   }
 }

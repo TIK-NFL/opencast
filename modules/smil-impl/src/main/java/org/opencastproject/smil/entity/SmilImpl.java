@@ -27,10 +27,14 @@ import org.opencastproject.smil.entity.api.SmilBody;
 import org.opencastproject.smil.entity.api.SmilHead;
 import org.opencastproject.smil.entity.api.SmilObject;
 import org.opencastproject.smil.entity.media.element.api.SmilMediaElement;
+import org.opencastproject.util.XmlSafeParser;
 
+import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.net.MalformedURLException;
@@ -189,17 +193,6 @@ public class SmilImpl extends SmilObjectImpl implements Smil {
   }
 
   /**
-   * JAXB helper method, references to {
-   *
-   * @param smil {@link Smil} document as xml
-   * @return parsed {@link SmilImpl}
-   * @throws JAXBException if unmarshalling fail
-   */
-  public static SmilImpl fromString(String smil) throws JAXBException {
-    return (SmilImpl) fromXML(smil);
-  }
-
-  /**
    * Unmarshall a SMIL document from string.
    *
    * @param xml {@link Smil} document as xml
@@ -209,7 +202,12 @@ public class SmilImpl extends SmilObjectImpl implements Smil {
   public static Smil fromXML(String xml) throws JAXBException {
     JAXBContext jctx = JAXBContext.newInstance(SmilImpl.class);
     Unmarshaller unmarshaller = jctx.createUnmarshaller();
-    return (Smil) unmarshaller.unmarshal(new StringReader(xml));
+    InputSource is = new InputSource(new StringReader(xml));
+    try {
+      return (Smil) unmarshaller.unmarshal(XmlSafeParser.parse(is));
+    } catch (IOException | SAXException e) {
+      throw new JAXBException(e);
+    }
   }
 
   /**
@@ -222,7 +220,11 @@ public class SmilImpl extends SmilObjectImpl implements Smil {
   public static Smil fromXML(File xmlFile) throws JAXBException {
     JAXBContext jctx = JAXBContext.newInstance(SmilImpl.class);
     Unmarshaller unmarshaller = jctx.createUnmarshaller();
-    return (Smil) unmarshaller.unmarshal(xmlFile);
+    try (FileInputStream is = new FileInputStream(xmlFile)) {
+      return (Smil) unmarshaller.unmarshal(XmlSafeParser.parse(is));
+    } catch (IOException | SAXException e) {
+      throw new JAXBException(e);
+    }
   }
 
   /**

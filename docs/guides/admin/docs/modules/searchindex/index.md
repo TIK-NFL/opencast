@@ -2,13 +2,13 @@ Search Indexes
 ==============
 
 Opencast comes with multiple search indexes which act both as a cache and as a fast way to perform full text searches on
-metadata. By default, all search indexes are created automatically and no additional external software is required.
+metadata. By default, the Solr search indexes are created automatically and no additional external software is required.
+
+For Elasticsearch, a separate installation is required since Opencast version 9.0.
 
 While this works well, all indexes can be deployed separately. This comes with the obvious drawback of a harder
 deployment but has also a few advantages like a smaller core system or being able to have some service redundancies
 which would not be possible otherwise.
-
-Opencast currently uses two search index types: Solr and Elasticsearch.
 
 ---
 
@@ -17,8 +17,8 @@ Opencast currently uses two search index types: Solr and Elasticsearch.
 
     [Solr Configuration Guide](solr.md)
 
+- Elasticsearch powers the external API as well as the administrative user interface of Opencast.
+
+    [Elasticsearch Configuration Guide](../../configuration/elasticsearch.md)
+
 ---
-
-- Elasticsearch is the back-end for both the administrative user interface as well as the external API.
-
-    [Elasticsearch Configuration Guide](elasticsearch.md)

@@ -45,10 +45,27 @@ import javax.xml.bind.annotation.XmlAttribute;
 @Entity(name = "TranscriptionJobControl")
 @Table(name = "oc_transcription_service_job")
 @NamedQueries({
-  @NamedQuery(name = "TranscriptionJobControl.findByMediaPackage", query = "SELECT jc FROM TranscriptionJobControl jc WHERE jc.mediaPackageId = :mediaPackageId ORDER BY jc.dateCreated DESC"),
-  @NamedQuery(name = "TranscriptionJobControl.findByMediaPackageTrackAndStatus", query = "SELECT jc FROM TranscriptionJobControl jc WHERE jc.mediaPackageId = :mediaPackageId AND jc.trackId = :trackId AND jc.status IN :status"),
-  @NamedQuery(name = "TranscriptionJobControl.findByJob", query = "SELECT jc FROM TranscriptionJobControl jc WHERE jc.transcriptionJobId = :transcriptionJobId"),
-  @NamedQuery(name = "TranscriptionJobControl.findByStatus", query = "SELECT jc FROM TranscriptionJobControl jc WHERE jc.status IN :status")})
+    @NamedQuery(
+        name = "TranscriptionJobControl.findByMediaPackage",
+        query = "SELECT jc FROM TranscriptionJobControl jc "
+            + "WHERE jc.mediaPackageId = :mediaPackageId ORDER BY jc.dateCreated DESC"
+    ),
+    @NamedQuery(
+        name = "TranscriptionJobControl.findByMediaPackageTrackAndStatus",
+        query = "SELECT jc FROM TranscriptionJobControl jc "
+            + "WHERE jc.mediaPackageId = :mediaPackageId AND jc.trackId = :trackId AND jc.status IN :status"
+    ),
+    @NamedQuery(
+        name = "TranscriptionJobControl.findByJob",
+        query = "SELECT jc FROM TranscriptionJobControl jc "
+            + "WHERE jc.transcriptionJobId = :transcriptionJobId"
+    ),
+    @NamedQuery(
+        name = "TranscriptionJobControl.findByStatus",
+        query = "SELECT jc FROM TranscriptionJobControl jc "
+            + "WHERE jc.status IN :status"
+    ),
+})
 public class TranscriptionJobControlDto implements Serializable {
 
   @Id
@@ -70,15 +87,15 @@ public class TranscriptionJobControlDto implements Serializable {
   @Temporal(TemporalType.TIMESTAMP)
   private Date dateCreated;
 
-  @Column(name = "date_expected", nullable = true)
+  @Column(name = "date_expected")
   @Temporal(TemporalType.TIMESTAMP)
   private Date dateExpected;
 
-  @Column(name = "date_completed", nullable = true)
+  @Column(name = "date_completed")
   @Temporal(TemporalType.TIMESTAMP)
   private Date dateCompleted;
 
-  @Column(name = "status", nullable = true, length = 128)
+  @Column(name = "status", length = 128)
   private String status;
 
   @Column(name = "track_duration", nullable = false)
@@ -111,15 +128,24 @@ public class TranscriptionJobControlDto implements Serializable {
    * Convert into business object.
    */
   public TranscriptionJobControl toTranscriptionJobControl() {
-    return new TranscriptionJobControl(mediaPackageId, trackId, transcriptionJobId, dateCreated, dateExpected, dateCompleted, status,
-            trackDuration, providerId);
+    return new TranscriptionJobControl(
+        mediaPackageId, trackId, transcriptionJobId, dateCreated, dateExpected, dateCompleted, status,
+        trackDuration, providerId);
   }
 
   /**
    * Store new job control
    */
-  public static TranscriptionJobControlDto store(EntityManager em, String mediaPackageId, String trackId,
-          String transcriptionJobId, String jobStatus, long trackDuration, Date dateExpected, long providerId) throws TranscriptionDatabaseException {
+  public static TranscriptionJobControlDto store(
+      EntityManager em,
+      String mediaPackageId,
+      String trackId,
+      String transcriptionJobId,
+      String jobStatus,
+      long trackDuration,
+      Date dateExpected,
+      long providerId
+  ) throws TranscriptionDatabaseException {
     TranscriptionJobControlDto dto = new TranscriptionJobControlDto(mediaPackageId, trackId, transcriptionJobId,
             new Date(), dateExpected, null, jobStatus, trackDuration, providerId);
 
@@ -202,8 +228,9 @@ public class TranscriptionJobControlDto implements Serializable {
   public static List<TranscriptionJobControlDto> findByMediaPackageTrackAndStatus(EntityManager em,
           final String mediaPackageId, String trackId, final String... status) throws TranscriptionDatabaseException {
     Collection<String> statusCol = new HashSet<String>();
-    for (String st : status)
+    for (String st : status) {
       statusCol.add(st);
+    }
     Query query = null;
     try {
       query = em.createNamedQuery("TranscriptionJobControl.findByMediaPackageTrackAndStatus");

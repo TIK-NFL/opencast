@@ -21,10 +21,6 @@
 
 package org.opencastproject.event.comment;
 
-import static com.entwinemedia.fn.data.json.Jsons.BLANK;
-import static com.entwinemedia.fn.data.json.Jsons.f;
-import static com.entwinemedia.fn.data.json.Jsons.obj;
-import static com.entwinemedia.fn.data.json.Jsons.v;
 import static org.opencastproject.util.RequireUtil.notEmpty;
 import static org.opencastproject.util.RequireUtil.notNull;
 
@@ -36,14 +32,9 @@ import org.opencastproject.util.Jsons.Obj;
 import org.opencastproject.util.Jsons.Val;
 import org.opencastproject.util.data.Option;
 
-import com.entwinemedia.fn.data.json.Field;
-import com.entwinemedia.fn.data.json.JValue;
-
 import org.apache.commons.lang3.StringUtils;
 
-import java.util.ArrayList;
 import java.util.Date;
-import java.util.List;
 
 /**
  * Business object for comment replies.
@@ -98,7 +89,13 @@ public final class EventCommentReply {
    * @throws IllegalArgumentException
    *           if some of the parameters aren't set
    */
-  public static EventCommentReply create(Option<Long> id, String text, User author, Date creationDate, Date modificationDate) {
+  public static EventCommentReply create(
+      Option<Long> id,
+      String text,
+      User author,
+      Date creationDate,
+      Date modificationDate
+  ) {
     return new EventCommentReply(id, text, author, creationDate, modificationDate);
   }
 
@@ -157,10 +154,12 @@ public final class EventCommentReply {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o)
+    if (this == o) {
       return true;
-    if (o == null || getClass() != o.getClass())
+    }
+    if (o == null || getClass() != o.getClass()) {
       return false;
+    }
     EventCommentReply reply = (EventCommentReply) o;
     return text.equals(reply.getText()) && creationDate.equals(reply.getCreationDate())
             && modificationDate.equals(reply.getModificationDate()) && author.equals(reply.getAuthor());
@@ -181,30 +180,12 @@ public final class EventCommentReply {
             Jsons.p("email", author.getEmail()));
 
     Val idValue = Jsons.ZERO_VAL;
-    if (id.isSome())
+    if (id.isSome()) {
       idValue = Jsons.v(id.get());
+    }
 
     return Jsons.obj(Jsons.p("id", idValue), Jsons.p("text", text), Jsons.p("author", authorObj),
             Jsons.p("creationDate", DateTimeSupport.toUTC(creationDate.getTime())),
             Jsons.p("modificationDate", DateTimeSupport.toUTC(modificationDate.getTime())));
   }
-
-  public JValue toJValue() {
-    JValue authorObj = obj(f("name", v(author.getName(), BLANK)), f("username", v(author.getUsername())),
-            f("email", v(author.getEmail(), BLANK)));
-
-    JValue idValue = com.entwinemedia.fn.data.json.Jsons.ZERO;
-    if (id.isSome())
-      idValue = v(id.get());
-
-    List<Field> fields = new ArrayList<>();
-    fields.add(f("id", idValue));
-    fields.add(f("text", v(text)));
-    fields.add(f("author", authorObj));
-    fields.add(f("creationDate", v(DateTimeSupport.toUTC(creationDate.getTime()))));
-    fields.add(f("modificationDate", v(DateTimeSupport.toUTC(modificationDate.getTime()))));
-
-    return obj(fields);
-  }
-
 }

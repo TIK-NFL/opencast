@@ -26,20 +26,22 @@ import org.opencastproject.coverimage.CoverImageService;
 import org.opencastproject.job.api.Job;
 import org.opencastproject.job.api.JobContext;
 import org.opencastproject.mediapackage.Attachment;
+import org.opencastproject.mediapackage.Catalog;
+import org.opencastproject.mediapackage.EName;
 import org.opencastproject.mediapackage.MediaPackage;
 import org.opencastproject.mediapackage.MediaPackageElementFlavor;
 import org.opencastproject.mediapackage.MediaPackageElementParser;
 import org.opencastproject.mediapackage.MediaPackageException;
-import org.opencastproject.metadata.api.MetadataValue;
-import org.opencastproject.metadata.api.StaticMetadata;
 import org.opencastproject.metadata.api.StaticMetadataService;
-import org.opencastproject.metadata.dublincore.DublinCore;
+import org.opencastproject.metadata.dublincore.DublinCoreCatalog;
 import org.opencastproject.metadata.dublincore.DublinCoreCatalogService;
+import org.opencastproject.metadata.dublincore.DublinCoreUtil;
+import org.opencastproject.metadata.dublincore.DublinCoreValue;
 import org.opencastproject.serviceregistry.api.ServiceRegistryException;
 import org.opencastproject.util.MimeTypes;
 import org.opencastproject.util.NotFoundException;
-import org.opencastproject.util.data.Option;
 import org.opencastproject.workflow.api.AbstractWorkflowOperationHandler;
+import org.opencastproject.workflow.api.ConfiguredTagsAndFlavors;
 import org.opencastproject.workflow.api.WorkflowInstance;
 import org.opencastproject.workflow.api.WorkflowOperationException;
 import org.opencastproject.workflow.api.WorkflowOperationInstance;
@@ -60,9 +62,9 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -70,6 +72,8 @@ import java.util.UUID;
  */
 public abstract class CoverImageWorkflowOperationHandlerBase extends AbstractWorkflowOperationHandler {
 
+  private static final String EPISODE_FLAVOR = "episodeFlavor";
+  private static final String SERIES_FLAVOR = "seriesFlavor";
   private static final String COVERIMAGE_FILENAME = "coverimage.png";
   private static final String XSL_FILE_URL = "stylesheet";
   private static final String XML_METADATA = "metadata";
@@ -77,8 +81,6 @@ public abstract class CoverImageWorkflowOperationHandlerBase extends AbstractWor
   private static final String HEIGHT = "height";
   private static final String POSTERIMAGE_FLAVOR = "posterimage-flavor";
   private static final String POSTERIMAGE_URL = "posterimage";
-  private static final String TARGET_FLAVOR = "target-flavor";
-  private static final String TARGET_TAGS = "target-tags";
 
   /** The logging facility */
   private static final Logger logger = LoggerFactory.getLogger(CoverImageWorkflowOperationHandlerBase.class);
@@ -107,7 +109,7 @@ public abstract class CoverImageWorkflowOperationHandlerBase extends AbstractWor
     // User XML metadata from operation configuration, fallback to default metadata
     String xml = operation.getConfiguration(XML_METADATA);
     if (xml == null) {
-      xml = getMetadataXml(mediaPackage);
+      xml = getMetadataXml(mediaPackage, operation);
       logger.debug("Metadata was not part of operation configuration, using Dublin Core as fallback");
     }
     logger.debug("Metadata set to: {}", xml);
@@ -123,31 +125,26 @@ public abstract class CoverImageWorkflowOperationHandlerBase extends AbstractWor
 
     // Read optional poster image flavor
     String posterImgUri = getPosterImageFileUrl(operation.getConfiguration(POSTERIMAGE_URL));
-    if (posterImgUri == null)
+    if (posterImgUri == null) {
       posterImgUri = getPosterImageFileUrl(mediaPackage, operation.getConfiguration(POSTERIMAGE_FLAVOR));
+    }
     if (posterImgUri == null) {
       logger.debug("No optional poster image set");
     } else {
       logger.debug("Poster image found at '{}'", posterImgUri);
     }
 
+    //Get tags and flavors
+    ConfiguredTagsAndFlavors tagsAndFlavors = getTagsAndFlavors(workflowInstance,
+        Configuration.none, Configuration.none, Configuration.many, Configuration.one);
+
     // Read target flavor
-    String targetFlavor = operation.getConfiguration(TARGET_FLAVOR);
-    if (StringUtils.isBlank(targetFlavor)) {
-      logger.warn("Required configuration key '{}' is blank", TARGET_FLAVOR);
-      throw new WorkflowOperationException("Configuration key '" + TARGET_FLAVOR + "' must be set");
-    }
-    try {
-      MediaPackageElementFlavor.parseFlavor(targetFlavor);
-    } catch (IllegalArgumentException e) {
-      logger.warn("Given target flavor '{}' is not a valid flavor", targetFlavor);
-      throw new WorkflowOperationException(e);
-    }
+    MediaPackageElementFlavor targetFlavor = tagsAndFlavors.getSingleTargetFlavor();
 
     Job generate;
     try {
       generate = getCoverImageService().generateCoverImage(xml, xsl, String.valueOf(width), String.valueOf(height),
-              posterImgUri, targetFlavor);
+              posterImgUri, targetFlavor.toString());
       logger.debug("Job for cover image generation created");
 
       if (!waitForStatus(generate).isSuccess()) {
@@ -157,20 +154,16 @@ public abstract class CoverImageWorkflowOperationHandlerBase extends AbstractWor
       generate = serviceRegistry.getJob(generate.getId());
       Attachment coverImage = (Attachment) MediaPackageElementParser.getFromXml(generate.getPayload());
 
-      URI attachmentUri = getWorkspace().moveTo(coverImage.getURI(), mediaPackage.getIdentifier().compact(),
+      URI attachmentUri = getWorkspace().moveTo(coverImage.getURI(), mediaPackage.getIdentifier().toString(),
               UUID.randomUUID().toString(), COVERIMAGE_FILENAME);
       coverImage.setURI(attachmentUri);
 
       coverImage.setMimeType(MimeTypes.PNG);
 
       // Add tags
-      final String targetTags = StringUtils.trimToNull(operation.getConfiguration(TARGET_TAGS));
-      if (targetTags != null) {
-        for (String tag : asList(targetTags)) {
-          logger.trace("Tagging image with '{}'", tag);
-          if (StringUtils.trimToNull(tag) != null)
-            coverImage.addTag(tag);
-        }
+      for (String tag : tagsAndFlavors.getTargetTags()) {
+        logger.trace("Tagging image with '{}'", tag);
+        coverImage.addTag(tag);
       }
 
       mediaPackage.add(coverImage);
@@ -213,7 +206,8 @@ public abstract class CoverImageWorkflowOperationHandlerBase extends AbstractWor
     if (atts.length > 1) {
       logger.warn("More than one attachment with the flavor '{}' found in media package '{}'", posterimageFlavor,
               mediaPackage.getIdentifier());
-      throw new WorkflowOperationException("More than one attachment with the flavor'" + posterimageFlavor + "' found.");
+      throw new WorkflowOperationException(
+              "More than one attachment with the flavor'" + posterimageFlavor + "' found.");
     } else if (atts.length == 0) {
       logger.warn("No attachment with the flavor '{}' found in media package '{}'", posterimageFlavor,
               mediaPackage.getIdentifier());
@@ -230,8 +224,9 @@ public abstract class CoverImageWorkflowOperationHandlerBase extends AbstractWor
 
   protected String getPosterImageFileUrl(String posterimageUrlOpt) {
 
-    if (StringUtils.isBlank(posterimageUrlOpt))
+    if (StringUtils.isBlank(posterimageUrlOpt)) {
       return null;
+    }
 
     URL url = null;
     try {
@@ -240,11 +235,13 @@ public abstract class CoverImageWorkflowOperationHandlerBase extends AbstractWor
       logger.debug("Given poster image URI '{}' is not valid", posterimageUrlOpt);
     }
 
-    if (url == null)
+    if (url == null) {
       return null;
+    }
 
-    if ("file".equals(url.getProtocol()))
+    if ("file".equals(url.getProtocol())) {
       return url.toExternalForm();
+    }
 
     try {
       File coverImageFile = getWorkspace().get(url.toURI());
@@ -264,24 +261,27 @@ public abstract class CoverImageWorkflowOperationHandlerBase extends AbstractWor
   protected int getIntConfiguration(WorkflowOperationInstance operation, String key) throws WorkflowOperationException {
     String confString = operation.getConfiguration(key);
     int confValue = 0;
-    if (StringUtils.isBlank(confString))
+    if (StringUtils.isBlank(confString)) {
       throw new WorkflowOperationException("Configuration key '" + key + "' must be set");
+    }
     try {
       confValue = Integer.parseInt(confString);
-      if (confValue < 1)
+      if (confValue < 1) {
         throw new WorkflowOperationException("Configuration key '" + key
-                + "' must be set to a valid positive integer value");
+            + "' must be set to a valid positive integer value");
+      }
     } catch (NumberFormatException e) {
       throw new WorkflowOperationException("Configuration key '" + key
-              + "' must be set to a valid positive integer value");
+          + "' must be set to a valid positive integer value");
     }
     return confValue;
   }
 
   protected String loadXsl(WorkflowOperationInstance operation) throws WorkflowOperationException {
     String xslUriString = operation.getConfiguration(XSL_FILE_URL);
-    if (StringUtils.isBlank(xslUriString))
+    if (StringUtils.isBlank(xslUriString)) {
       throw new WorkflowOperationException("Configuration option '" + XSL_FILE_URL + "' must not be empty");
+    }
     FileReader reader = null;
     try {
       URI xslUri = new URI(xslUriString);
@@ -302,60 +302,109 @@ public abstract class CoverImageWorkflowOperationHandlerBase extends AbstractWor
     }
   }
 
-  protected String getMetadataXml(MediaPackage mp) {
-    StaticMetadata metadata = getStaticMetadataService().getMetadata(mp);
+  protected String getMetadataXml(MediaPackage mp, WorkflowOperationInstance operation) {
+    //get specified episode/series flavor
+    final String configuredEpisodeFlavor =
+            Objects.toString(StringUtils.trimToNull(operation.getConfiguration(EPISODE_FLAVOR)),
+                    "dublincore/episode");
+    final String configuredSeriesFlavor =
+            Objects.toString(StringUtils.trimToNull(operation.getConfiguration(SERIES_FLAVOR)),
+                    "dublincore/series");
 
+    MediaPackageElementFlavor episodeFlavor = MediaPackageElementFlavor.parseFlavor(configuredEpisodeFlavor);
+    MediaPackageElementFlavor seriesFlavor = MediaPackageElementFlavor.parseFlavor(configuredSeriesFlavor);
+
+    //Get episode metadata-catalog
+    Catalog[] catalogs =
+            mp.getCatalogs(new MediaPackageElementFlavor(episodeFlavor.getType(),
+                    StringUtils.lowerCase(episodeFlavor.getSubtype())));
+
+    //load metadata-catalog
+    DublinCoreCatalog dc = DublinCoreUtil.loadDublinCore(getWorkspace(), catalogs[0]);
+    Map<EName, List<DublinCoreValue>> data = dc.getValues();
+
+    //build xml from metadata
     StringBuilder xml = new StringBuilder();
     xml.append("<metadata xmlns:dcterms=\"http://purl.org/dc/terms/\">");
 
-    for (String title : getFirstMetadataValue(metadata.getTitles()))
-      appendXml(xml, "title", title);
-    for (String description : getFirstMetadataValue(metadata.getDescription()))
-      appendXml(xml, "description", description);
-    for (String language : metadata.getLanguage())
-      appendXml(xml, "language", language);
-    for (Date created : metadata.getCreated())
-      /* Method formatDate of org.apache.xalan.lib.ExsltDatetime requires the format CCYY-MM-DDThh:mm:ss */
-      appendXml(xml, "date", new SimpleDateFormat("YYYY-MM-dd'T'HH:mm:ss").format(created));
-    for (Date[] period : metadata.getTemporalPeriod()) {
-      if (period[0] != null) {
-        appendXml(xml, "start", new SimpleDateFormat("YYYY-MM-dd'T'HH:mm:ss").format(period[0]));
-      }
-      if (period[1] != null) {
-        appendXml(xml, "end", new SimpleDateFormat("YYYY-MM-dd'T'HH:mm:ss").format(period[1]));
+    for (Map.Entry<EName, List<DublinCoreValue>> entry : data.entrySet()) {
+      String currentKey = entry.getKey().getLocalName();
+      switch(currentKey) {
+        case "creator":
+          appendXml(xml, "creators", getValuesAsString(entry));
+          break;
+        case "isPartOf":
+          //get series catalog
+          Catalog[] seriesCatalogs =
+                  mp.getCatalogs(new MediaPackageElementFlavor(seriesFlavor.getType(), seriesFlavor.getSubtype()));
+          if (seriesCatalogs.length == 0) {
+            continue;
+          }
+          xml.append("<series>");
+          //get Series metadata
+          DublinCoreCatalog dcSeries = DublinCoreUtil.loadDublinCore(getWorkspace(), seriesCatalogs[0]);
+          Map<EName, List<DublinCoreValue>> seriesMetadata = dcSeries.getValues();
+          //append series metadata
+          for (Map.Entry<EName, List<DublinCoreValue>> seriesEntry : seriesMetadata.entrySet()) {
+            String currentSeriesKey = seriesEntry.getKey().getLocalName();
+            switch(currentSeriesKey) {
+              case "created":
+                String[] date = seriesEntry.getValue().get(0).getValue().split("\\.");
+                appendXml(xml, "date", date[0]);
+                break;
+              case "contributor":
+                appendXml(xml, "contributors", getValuesAsString(seriesEntry));
+                break;
+              default: String key = seriesEntry.getKey().getLocalName();
+                appendXml(xml, key, getValuesAsString(seriesEntry));
+            }
+          }
+          xml.append("</series>");
+          break;
+        case "temporal":
+          String[] entries = entry.getValue().get(0).getValue().split(";");
+          entries[0] = entries[0].trim().substring(6);
+          entries[1] = entries[1].trim().substring(4);
+          if (entries[0] != null) {
+            appendXml(xml, "start", entries[0]);
+          }
+          if (entries[1] != null) {
+            appendXml(xml, "end", entries[1]);
+          }
+          break;
+        case "created":
+          String[] date = entry.getValue().get(0).getValue().split("\\.");
+          appendXml(xml, "date", date[0]);
+          break;
+        case "contributor":
+          appendXml(xml, "contributors", getValuesAsString(entry));
+          break;
+        default: appendXml(xml, entry.getKey().getLocalName(), getValuesAsString(entry));
       }
     }
-    for (Date instant : metadata.getTemporalInstant())
-      appendXml(xml, "start", new SimpleDateFormat("YYYY-MM-dd'T'HH:mm:ss").format(instant));
-    for (Long duration : metadata.getTemporalDuration())
-      appendXml(xml, "duration", new SimpleDateFormat("HH:mm:ss").format(new Date(duration)));
-    for (String license : getFirstMetadataValue(metadata.getLicenses()))
-      appendXml(xml, "license", license);
-    for (String isPartOf : metadata.getIsPartOf())
-      appendXml(xml, "series", isPartOf);
-    for (String contributors : getFirstMetadataValue(metadata.getContributors()))
-      appendXml(xml, "contributors", contributors);
-    for (String creators : getFirstMetadataValue(metadata.getCreators()))
-      appendXml(xml, "creators", creators);
-    for (String subjects : getFirstMetadataValue(metadata.getSubjects()))
-      appendXml(xml, "subjects", subjects);
 
     xml.append("</metadata>");
-
     return xml.toString();
   }
 
-  protected Option<String> getFirstMetadataValue(List<MetadataValue<String>> list) {
-    for (MetadataValue<String> data : list) {
-      if (DublinCore.LANGUAGE_UNDEFINED.equals(data.getLanguage()))
-        return Option.some(data.getValue());
+  protected String getValuesAsString(Map.Entry<EName, List<DublinCoreValue>> entry) {
+    List<DublinCoreValue> values = entry.getValue();
+    String stringValues = "";
+    try {
+      stringValues += values.get(0).getValue();
+      for (int i = 1; i < values.size(); i++) {
+        stringValues += ", " + values.get(i).getValue();
+      }
+    } catch (IndexOutOfBoundsException e) {
+      logger.warn("Given Key '{}' has no Entries : {}", entry.getKey(), e.getMessage());
     }
-    return Option.<String> none();
+    return stringValues;
   }
 
   protected void appendXml(StringBuilder xml, String name, String body) {
-    if (StringUtils.isBlank(body) || StringUtils.isBlank(name))
+    if (StringUtils.isBlank(body) || StringUtils.isBlank(name)) {
       return;
+    }
 
     xml.append("<");
     xml.append(name);

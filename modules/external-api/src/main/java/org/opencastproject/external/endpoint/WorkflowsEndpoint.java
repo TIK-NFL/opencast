@@ -34,15 +34,13 @@ import static org.opencastproject.util.doc.rest.RestParameter.Type.BOOLEAN;
 import static org.opencastproject.util.doc.rest.RestParameter.Type.INTEGER;
 import static org.opencastproject.util.doc.rest.RestParameter.Type.STRING;
 
+import org.opencastproject.elasticsearch.index.ElasticsearchIndex;
+import org.opencastproject.elasticsearch.index.objects.event.Event;
 import org.opencastproject.external.common.ApiMediaType;
 import org.opencastproject.external.common.ApiResponses;
 import org.opencastproject.external.common.ApiVersion;
-import org.opencastproject.external.index.ExternalIndex;
 import org.opencastproject.index.service.api.IndexService;
-import org.opencastproject.index.service.impl.index.event.Event;
 import org.opencastproject.index.service.util.RestUtils;
-import org.opencastproject.matterhorn.search.SearchQuery;
-import org.opencastproject.matterhorn.search.SortCriterion;
 import org.opencastproject.mediapackage.MediaPackage;
 import org.opencastproject.rest.RestConstants;
 import org.opencastproject.security.api.UnauthorizedException;
@@ -55,6 +53,8 @@ import org.opencastproject.util.doc.rest.RestParameter;
 import org.opencastproject.util.doc.rest.RestQuery;
 import org.opencastproject.util.doc.rest.RestResponse;
 import org.opencastproject.util.doc.rest.RestService;
+import org.opencastproject.util.requests.SortCriterion;
+import org.opencastproject.util.requests.SortCriterion.Order;
 import org.opencastproject.workflow.api.RetryStrategy;
 import org.opencastproject.workflow.api.WorkflowDefinition;
 import org.opencastproject.workflow.api.WorkflowInstance;
@@ -101,8 +101,11 @@ import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.Response;
 
 @Path("/")
-@Produces({ ApiMediaType.JSON, ApiMediaType.VERSION_1_1_0, ApiMediaType.VERSION_1_2_0, ApiMediaType.VERSION_1_3_0 })
-@RestService(name = "externalapiworkflowinstances", title = "External API Workflow Instances Service", notes = {}, abstractText = "Provides resources and operations related to the workflow instances")
+@Produces({ ApiMediaType.JSON, ApiMediaType.VERSION_1_1_0, ApiMediaType.VERSION_1_2_0, ApiMediaType.VERSION_1_3_0,
+            ApiMediaType.VERSION_1_4_0, ApiMediaType.VERSION_1_5_0, ApiMediaType.VERSION_1_6_0,
+            ApiMediaType.VERSION_1_7_0 })
+@RestService(name = "externalapiworkflowinstances", title = "External API Workflow Instances Service", notes = {},
+             abstractText = "Provides resources and operations related to the workflow instances")
 public class WorkflowsEndpoint {
   /** The logging facility */
   private static final Logger logger = LoggerFactory.getLogger(WorkflowsEndpoint.class);
@@ -112,7 +115,7 @@ public class WorkflowsEndpoint {
 
   /* OSGi service references */
   private WorkflowService workflowService;
-  private ExternalIndex externalIndex;
+  private ElasticsearchIndex elasticsearchIndex;
   private IndexService indexService;
 
   /** OSGi DI */
@@ -121,8 +124,8 @@ public class WorkflowsEndpoint {
   }
 
   /** OSGi DI */
-  public void setExternalIndex(ExternalIndex externalIndex) {
-    this.externalIndex = externalIndex;
+  public void setElasticsearchIndex(ElasticsearchIndex elasticsearchIndex) {
+    this.elasticsearchIndex = elasticsearchIndex;
   }
 
   /** OSGi DI */
@@ -150,7 +153,7 @@ public class WorkflowsEndpoint {
           @RestParameter(name = "filter", description = "A comma seperated list of filters to limit the results with. A filter is the filter's name followed by a colon \":\" and then the value to filter with so it is the form <Filter Name>:<Value to Filter With>.", isRequired = false, type = STRING),
           @RestParameter(name = "sort", description = "Sort the results based upon a list of comma seperated sorting criteria. In the comma seperated list each type of sorting is specified as a pair such as: <Sort Name>:ASC or <Sort Name>:DESC. Adding the suffix ASC or DESC sets the order as ascending or descending order and is mandatory.", isRequired = false, type = STRING),
           @RestParameter(name = "limit", description = "The maximum number of results to return for a single request.", isRequired = false, type = INTEGER),
-          @RestParameter(name = "offset", description = "The index of the first result to return.", isRequired = false, type = INTEGER) }, reponses = {
+          @RestParameter(name = "offset", description = "The index of the first result to return.", isRequired = false, type = INTEGER) }, responses = {
           @RestResponse(description = "A (potentially empty) list of workflow instances is returned.", responseCode = HttpServletResponse.SC_OK),
           @RestResponse(description = "The request is invalid or inconsistent.", responseCode = HttpServletResponse.SC_BAD_REQUEST) })
   public Response getWorkflowInstances(@HeaderParam("Accept") String acceptHeader,
@@ -245,7 +248,7 @@ public class WorkflowsEndpoint {
     if (isNoneBlank(sort)) {
       Set<SortCriterion> sortCriteria = RestUtils.parseSortQueryParameter(sort);
       for (SortCriterion criterion : sortCriteria) {
-        boolean isASC = criterion.getOrder() != SearchQuery.Order.Descending;
+        boolean isASC = criterion.getOrder() != Order.Descending;
         switch (criterion.getFieldName()) {
           case "event_identifier":
             // FIXME: sorting by event_identifier leads to an Solr exception
@@ -321,7 +324,7 @@ public class WorkflowsEndpoint {
           @RestParameter(name = "workflow_definition_identifier", description = "The identifier of the workflow definition to use", isRequired = true, type = STRING),
           @RestParameter(name = "configuration", description = "The optional configuration for this workflow", isRequired = false, type = STRING),
           @RestParameter(name = "withoperations", description = "Whether the workflow operations should be included in the response", isRequired = false, type = BOOLEAN),
-          @RestParameter(name = "withconfiguration", description = "Whether the workflow configuration should be included in the response", isRequired = false, type = BOOLEAN), }, reponses = {
+          @RestParameter(name = "withconfiguration", description = "Whether the workflow configuration should be included in the response", isRequired = false, type = BOOLEAN), }, responses = {
           @RestResponse(description = "A new workflow is created and its identifier is returned in the Location header.", responseCode = HttpServletResponse.SC_CREATED),
           @RestResponse(description = "The request is invalid or inconsistent.", responseCode = HttpServletResponse.SC_BAD_REQUEST),
           @RestResponse(description = "The event or workflow definition could not be found.", responseCode = HttpServletResponse.SC_NOT_FOUND) })
@@ -340,7 +343,7 @@ public class WorkflowsEndpoint {
 
     try {
       // Media Package
-      Opt<Event> event = indexService.getEvent(eventId, externalIndex);
+      Opt<Event> event = indexService.getEvent(eventId, elasticsearchIndex);
       if (event.isNone()) {
         return ApiResponses.notFound("Cannot find an event with id '%s'.", eventId);
       }
@@ -383,7 +386,7 @@ public class WorkflowsEndpoint {
   @RestQuery(name = "getworkflowinstance", description = "Returns a single workflow instance.", returnDescription = "", pathParameters = {
           @RestParameter(name = "workflowInstanceId", description = "The workflow instance id", isRequired = true, type = INTEGER) }, restParameters = {
           @RestParameter(name = "withoperations", description = "Whether the workflow operations should be included in the response", isRequired = false, type = BOOLEAN),
-          @RestParameter(name = "withconfiguration", description = "Whether the workflow configuration should be included in the response", isRequired = false, type = BOOLEAN) }, reponses = {
+          @RestParameter(name = "withconfiguration", description = "Whether the workflow configuration should be included in the response", isRequired = false, type = BOOLEAN) }, responses = {
           @RestResponse(description = "The workflow instance is returned.", responseCode = HttpServletResponse.SC_OK),
           @RestResponse(description = "The user doesn't have the rights to make this request.", responseCode = HttpServletResponse.SC_FORBIDDEN),
           @RestResponse(description = "The specified workflow instance does not exist.", responseCode = HttpServletResponse.SC_NOT_FOUND) })
@@ -412,7 +415,7 @@ public class WorkflowsEndpoint {
           @RestParameter(name = "configuration", description = "The optional configuration for this workflow", isRequired = false, type = STRING),
           @RestParameter(name = "state", description = "The optional state transition for this workflow", isRequired = false, type = STRING),
           @RestParameter(name = "withoperations", description = "Whether the workflow operations should be included in the response", isRequired = false, type = BOOLEAN),
-          @RestParameter(name = "withconfiguration", description = "Whether the workflow configuration should be included in the response", isRequired = false, type = BOOLEAN), }, reponses = {
+          @RestParameter(name = "withconfiguration", description = "Whether the workflow configuration should be included in the response", isRequired = false, type = BOOLEAN), }, responses = {
           @RestResponse(description = "The workflow instance is updated.", responseCode = HttpServletResponse.SC_OK),
           @RestResponse(description = "The request is invalid or inconsistent.", responseCode = HttpServletResponse.SC_BAD_REQUEST),
           @RestResponse(description = "The user doesn't have the rights to make this request.", responseCode = HttpServletResponse.SC_FORBIDDEN),
@@ -508,7 +511,7 @@ public class WorkflowsEndpoint {
   @DELETE
   @Path("{workflowInstanceId}")
   @RestQuery(name = "deleteworkflowinstance", description = "Deletes a workflow instance.", returnDescription = "", pathParameters = {
-          @RestParameter(name = "workflowInstanceId", description = "The workflow instance id", isRequired = true, type = INTEGER) }, reponses = {
+          @RestParameter(name = "workflowInstanceId", description = "The workflow instance id", isRequired = true, type = INTEGER) }, responses = {
           @RestResponse(description = "The workflow instance has been deleted.", responseCode = HttpServletResponse.SC_NO_CONTENT),
           @RestResponse(description = "The user doesn't have the rights to make this request.", responseCode = HttpServletResponse.SC_FORBIDDEN),
           @RestResponse(description = "The specified workflow instance does not exist.", responseCode = HttpServletResponse.SC_NOT_FOUND),

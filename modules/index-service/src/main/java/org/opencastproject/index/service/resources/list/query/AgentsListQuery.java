@@ -21,10 +21,11 @@
 
 package org.opencastproject.index.service.resources.list.query;
 
-import org.opencastproject.index.service.resources.list.api.ResourceListFilter;
-import org.opencastproject.index.service.resources.list.api.ResourceListFilter.SourceType;
 import org.opencastproject.index.service.resources.list.provider.AgentsListProvider;
 import org.opencastproject.index.service.util.FiltersUtils;
+import org.opencastproject.list.api.ResourceListFilter;
+import org.opencastproject.list.api.ResourceListFilter.SourceType;
+import org.opencastproject.list.impl.ResourceListQueryImpl;
 import org.opencastproject.util.data.Option;
 
 /**
@@ -50,7 +51,6 @@ public class AgentsListQuery extends ResourceListQueryImpl {
 
   public AgentsListQuery() {
     super();
-    this.availableFilters.add(createNameFilter(Option.<String> none()));
     this.availableFilters.add(createStatusFilter(Option.<String> none()));
   }
 

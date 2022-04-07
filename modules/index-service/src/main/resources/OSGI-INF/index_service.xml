@@ -25,11 +25,6 @@
              cardinality="1..1"
              policy="static"
              bind="setCaptureAgentStateService"/>
-  <reference name="CommonEventCatalogUIAdapter"
-             interface="org.opencastproject.index.service.catalog.adapter.events.CommonEventCatalogUIAdapter"
-             cardinality="1..1"
-             policy="static"
-             bind="setCommonEventCatalogUIAdapter"/>
   <reference name="EventCatalogUIAdapter"
              interface="org.opencastproject.metadata.dublincore.EventCatalogUIAdapter"
              cardinality="0..n"
@@ -47,7 +42,7 @@
              policy="static"
              bind="setIngestService"/>
   <reference name="ListProvidersService"
-             interface="org.opencastproject.index.service.resources.list.api.ListProvidersService"
+             interface="org.opencastproject.list.api.ListProvidersService"
              cardinality="1..1"
              policy="static"
              bind="setListProvidersService"/>
@@ -66,11 +61,6 @@
              cardinality="1..1"
              policy="static"
              bind="setSecurityService"/>
-  <reference name="CommonSeriesCatalogUIAdapter"
-             interface="org.opencastproject.index.service.catalog.adapter.series.CommonSeriesCatalogUIAdapter"
-             cardinality="1..1"
-             policy="static"
-             bind="setCommonSeriesCatalogUIAdapter"/>
   <reference name="SeriesCatalogUIAdapter"
              interface="org.opencastproject.metadata.dublincore.SeriesCatalogUIAdapter"
              cardinality="0..n"
@@ -91,11 +81,6 @@
              cardinality="1..1"
              interface="org.opencastproject.workspace.api.Workspace"
              name="workspace"
-             policy="static"/>
-  <reference name="groupRoleProvider"
-             cardinality="1..1"
-             interface="org.opencastproject.userdirectory.JpaGroupRoleProvider"
-             bind="setGroupRoleProvider"
              policy="static"/>
   <reference name="userDirectoryService"
              interface="org.opencastproject.security.api.UserDirectoryService"

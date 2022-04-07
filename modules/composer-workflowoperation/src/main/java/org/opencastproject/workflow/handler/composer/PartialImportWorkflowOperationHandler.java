@@ -106,6 +106,7 @@ public class PartialImportWorkflowOperationHandler extends AbstractWorkflowOpera
   private static final String CONCAT_OUTPUT_FRAMERATE = "concat-output-framerate";
   private static final String TRIM_ENCODING_PROFILE = "trim-encoding-profile";
   private static final String FORCE_ENCODING_PROFILE = "force-encoding-profile";
+  private static final String PREENCODE_ENCODING_PROFILE = "preencode-encoding-profile";
 
   private static final String FORCE_ENCODING = "force-encoding";
   private static final String REQUIRED_EXTENSIONS = "required-extensions";
@@ -207,6 +208,7 @@ public class PartialImportWorkflowOperationHandler extends AbstractWorkflowOpera
     final boolean forceEncoding = BooleanUtils.toBoolean(getOptConfig(operation, FORCE_ENCODING).getOr("false"));
     final boolean forceDivisible = BooleanUtils.toBoolean(getOptConfig(operation, ENFORCE_DIVISIBLE_BY_TWO).getOr("false"));
     final List<String> requiredExtensions = getRequiredExtensions(operation);
+    final String preencodeEncodingProfile = getConfig(operation, PREENCODE_ENCODING_PROFILE);
 
     //
     // further checks on config options
@@ -215,6 +217,12 @@ public class PartialImportWorkflowOperationHandler extends AbstractWorkflowOpera
       logger.warn("No presenter and presentation flavor has been set.");
       return createResult(mediaPackage, Action.SKIP);
     }
+
+    final EncodingProfile preencodeProfile = composerService.getProfile(preencodeEncodingProfile);
+    if (preencodeProfile == null) {
+      throw new WorkflowOperationException("Preencode encoding profile '" + preencodeEncodingProfile + "' was not found");
+    }
+
     final EncodingProfile concatProfile = composerService.getProfile(concatEncodingProfile);
     if (concatProfile == null) {
       throw new WorkflowOperationException("Concat encoding profile '" + concatEncodingProfile + "' was not found");
@@ -239,21 +247,22 @@ public class PartialImportWorkflowOperationHandler extends AbstractWorkflowOpera
     // get tracks
     final TrackSelector presenterTrackSelector = mkTrackSelector(presenterFlavor);
     final TrackSelector presentationTrackSelector = mkTrackSelector(presentationFlavor);
-    final List<Track> originalTracks = new ArrayList<Track>();
-    final List<Track> presenterTracks = new ArrayList<Track>();
-    final List<Track> presentationTracks = new ArrayList<Track>();
+    List<Track> originalTracks = new ArrayList<Track>();
     // Collecting presenter tracks
     for (Track t : presenterTrackSelector.select(mediaPackage, false)) {
       logger.info("Found partial presenter track {}", t);
       originalTracks.add(t);
-      presenterTracks.add(t);
     }
     // Collecting presentation tracks
     for (Track t : presentationTrackSelector.select(mediaPackage, false)) {
       logger.info("Found partial presentation track {}", t);
       originalTracks.add(t);
-      presentationTracks.add(t);
     }
+
+    // Encode all tracks to same format to enable use of ffmpeg concat-demuxer
+    logger.info("Starting preencoding");
+    originalTracks = preencode(preencodeProfile, originalTracks);
+
 
     // flavor_type -> job
     final Map<String, Job> jobs = new HashMap<String, Job>();
@@ -533,10 +542,9 @@ public class PartialImportWorkflowOperationHandler extends AbstractWorkflowOpera
           throws MediaPackageException, EncoderException {
     final Dimension dim = determineDimension(tracks, forceDivisible);
     if (outputFramerate > 0.0) {
-      return composerService.concat(profile.getIdentifier(), dim, outputFramerate, false, Collections.toArray(Track.class, tracks));
+      return composerService.concat(profile.getIdentifier(), dim, outputFramerate, true, Collections.toArray(Track.class, tracks));
     } else {
-      return composerService.concat(profile.getIdentifier(), dim, false, Collections.toArray(Track.class, tracks));
-    }
+      return composerService.concat(profile.getIdentifier(), dim, true, Collections.toArray(Track.class, tracks));    }
   }
 
   /**
@@ -813,6 +821,36 @@ public class PartialImportWorkflowOperationHandler extends AbstractWorkflowOpera
   }
 
   /**
+   * Encodes a given list of <code>tracks</code> using the encoding profile <code>profile</code>
+   * and returns the encoded tracks.
+   * Makes sure to keep the tracks ID and Flavor so as to not break later operations.
+   *
+   * @return the encoded tracks
+   */
+  private List<Track> preencode(EncodingProfile profile, List<Track> tracks)
+          throws MediaPackageException, EncoderException, WorkflowOperationException, NotFoundException,
+          ServiceRegistryException {
+    List<Track> encodedTracks = new ArrayList<>();
+    for (Track track : tracks) {
+      logger.info("Preencoding track {}", track.getIdentifier());
+      Job encodeJob = composerService.encode(track, profile.getIdentifier());
+      if (!waitForStatus(encodeJob).isSuccess()) {
+        throw new WorkflowOperationException("Encoding of track " + track + " failed");
+      }
+      encodeJob = serviceRegistry.getJob(encodeJob.getId());
+      Track encodedTrack = (Track) MediaPackageElementParser.getFromXml(encodeJob.getPayload());
+      if (encodedTrack == null) {
+        throw new WorkflowOperationException("Encoded track " + track + " failed to produce a track");
+      }
+      encodedTrack.setIdentifier(track.getIdentifier());
+      encodedTrack.setFlavor(track.getFlavor());
+      encodedTracks.add(encodedTrack);
+    }
+
+    return encodedTracks;
+  }
+
+  /**
    * Encode <code>track</code> using encoding profile <code>profile</code> and add the result to media package
    * <code>mp</code> under the given <code>targetFlavor</code>.
    *
@@ -833,13 +871,13 @@ public class PartialImportWorkflowOperationHandler extends AbstractWorkflowOpera
     URI uri;
     if (FilenameUtils.getExtension(encodedTrack.getURI().toString()).equalsIgnoreCase(
             FilenameUtils.getExtension(track.getURI().toString()))) {
-      uri = workspace.moveTo(encodedTrack.getURI(), mp.getIdentifier().compact(), encodedTrack.getIdentifier(),
+      uri = workspace.moveTo(encodedTrack.getURI(), mp.getIdentifier().toString(), encodedTrack.getIdentifier(),
               FilenameUtils.getName(track.getURI().toString()));
     } else {
       // The new encoded file has a different extension.
       uri = workspace.moveTo(
               encodedTrack.getURI(),
-              mp.getIdentifier().compact(),
+              mp.getIdentifier().toString(),
               encodedTrack.getIdentifier(),
               FilenameUtils.getBaseName(track.getURI().toString()) + "."
                       + FilenameUtils.getExtension(encodedTrack.getURI().toString()));
@@ -863,7 +901,7 @@ public class PartialImportWorkflowOperationHandler extends AbstractWorkflowOpera
     if (trimmedTrack == null)
       throw new WorkflowOperationException("Trimming track " + track + " failed to produce a track");
 
-    URI uri = workspace.moveTo(trimmedTrack.getURI(), mediaPackage.getIdentifier().compact(),
+    URI uri = workspace.moveTo(trimmedTrack.getURI(), mediaPackage.getIdentifier().toString(),
             trimmedTrack.getIdentifier(), FilenameUtils.getName(track.getURI().toString()));
     trimmedTrack.setURI(uri);
     trimmedTrack.setFlavor(track.getFlavor());
@@ -886,7 +924,13 @@ public class PartialImportWorkflowOperationHandler extends AbstractWorkflowOpera
       } else {
         SMILMediaElement e = (SMILMediaElement) item;
         if (mediaType.equals(e.getNodeName())) {
-          Track track = getFromOriginal(e.getId(), originalTracks, type);
+          Track track;
+          try {
+            track = getFromOriginal(e.getId(), originalTracks, type);
+          } catch (IllegalStateException exception) {
+            logger.debug("Skipping smil entry, reason: " + exception.getMessage());
+            continue;
+          }
           double beginInSeconds = e.getBegin().item(0).getResolvedOffset();
           long beginInMs = Math.round(beginInSeconds * 1000d);
           // Fill out gaps with first or last frame from video

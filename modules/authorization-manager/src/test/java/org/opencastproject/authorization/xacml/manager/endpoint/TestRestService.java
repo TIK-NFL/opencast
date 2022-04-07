@@ -22,8 +22,6 @@
 package org.opencastproject.authorization.xacml.manager.endpoint;
 
 import static com.entwinemedia.fn.Stream.$;
-import static org.opencastproject.test.rest.RestServiceTestEnv.localhostRandomPort;
-import static org.opencastproject.util.persistence.PersistenceEnvs.persistenceEnvironment;
 import static org.opencastproject.util.persistence.PersistenceUtil.newTestEntityManagerFactory;
 
 import org.opencastproject.assetmanager.api.AssetManager;
@@ -40,12 +38,19 @@ import org.opencastproject.authorization.xacml.manager.api.AclServiceFactory;
 import org.opencastproject.authorization.xacml.manager.impl.AclDb;
 import org.opencastproject.authorization.xacml.manager.impl.AclServiceImpl;
 import org.opencastproject.authorization.xacml.manager.impl.persistence.JpaAclDb;
+import org.opencastproject.elasticsearch.api.SearchIndexException;
+import org.opencastproject.elasticsearch.api.SearchResultItem;
+import org.opencastproject.elasticsearch.impl.SearchResultImpl;
+import org.opencastproject.elasticsearch.index.ElasticsearchIndex;
+import org.opencastproject.elasticsearch.index.objects.event.Event;
+import org.opencastproject.elasticsearch.index.objects.event.EventSearchQuery;
+import org.opencastproject.elasticsearch.index.objects.series.Series;
+import org.opencastproject.elasticsearch.index.objects.series.SeriesSearchQuery;
 import org.opencastproject.mediapackage.Attachment;
 import org.opencastproject.mediapackage.MediaPackage;
 import org.opencastproject.mediapackage.MediaPackageBuilderImpl;
 import org.opencastproject.mediapackage.MediaPackageException;
 import org.opencastproject.mediapackage.attachment.AttachmentImpl;
-import org.opencastproject.message.broker.api.MessageSender;
 import org.opencastproject.security.api.AccessControlList;
 import org.opencastproject.security.api.AclScope;
 import org.opencastproject.security.api.AuthorizationService;
@@ -56,8 +61,6 @@ import org.opencastproject.security.api.Organization;
 import org.opencastproject.security.api.SecurityConstants;
 import org.opencastproject.security.api.SecurityService;
 import org.opencastproject.security.api.User;
-import org.opencastproject.series.api.SeriesService;
-import org.opencastproject.util.NotFoundException;
 import org.opencastproject.util.data.Tuple;
 import org.opencastproject.workspace.api.Workspace;
 
@@ -65,8 +68,6 @@ import com.entwinemedia.fn.data.Opt;
 
 import org.easymock.EasyMock;
 import org.junit.Ignore;
-
-import java.net.URL;
 
 import javax.persistence.EntityManagerFactory;
 import javax.ws.rs.Path;
@@ -77,17 +78,14 @@ import javax.ws.rs.Path;
 @Ignore
 public class TestRestService extends AbstractAclServiceRestEndpoint {
 
-  public static final URL BASE_URL = localhostRandomPort();
-
   // Declare this dependency static since the TestRestService gets instantiated multiple times.
   // Haven't found out who's responsible for this but that's the way it is.
   public static final AclServiceFactory aclServiceFactory;
   public static final SecurityService securityService;
-  public static final SeriesService seriesService;
   public static final AuthorizationService authorizationService;
   public static final AssetManager assetManager;
-  public static final MessageSender messageSender;
   public static final Workspace workspace;
+  public static final ElasticsearchIndex index;
   public static final EntityManagerFactory authorizationEMF = newTestEntityManagerFactory(
           "org.opencastproject.authorization.xacml.manager");
 
@@ -98,17 +96,34 @@ public class TestRestService extends AbstractAclServiceRestEndpoint {
     EasyMock.expect(testSecurityService.getOrganization()).andReturn(new DefaultOrganization()).anyTimes();
     EasyMock.expect(testSecurityService.getUser()).andReturn(user).anyTimes();
     EasyMock.replay(testSecurityService);
-    securityService = testSecurityService;
     authorizationService = newAuthorizationService();
-    seriesService = newSeriesService();
     assetManager = newAssetManager();
-    messageSender = newMessageSender();
+    securityService = testSecurityService;
     workspace = newWorkspace();
+
+    SearchResultImpl<Event> eventSearchResult = EasyMock.createNiceMock(SearchResultImpl.class);
+    EasyMock.expect(eventSearchResult.getItems()).andReturn(new SearchResultItem[] {}).anyTimes();
+    SearchResultImpl<Series> seriesSearchResult = EasyMock.createNiceMock(SearchResultImpl.class);
+    EasyMock.expect(seriesSearchResult.getItems()).andReturn(new SearchResultItem[] {}).anyTimes();
+
+    index = EasyMock.createNiceMock(ElasticsearchIndex.class);
+
+    try {
+      EasyMock.expect(index.getByQuery(EasyMock.anyObject(EventSearchQuery.class)))
+              .andReturn(eventSearchResult).anyTimes();
+      EasyMock.expect(index.getByQuery(EasyMock.anyObject(SeriesSearchQuery.class)))
+              .andReturn(seriesSearchResult).anyTimes();
+    } catch (SearchIndexException e) {
+      // should never happen
+    }
+
+    EasyMock.replay(index, eventSearchResult, seriesSearchResult);
+
     aclServiceFactory = new AclServiceFactory() {
       @Override
       public AclService serviceFor(Organization org) {
-        return new AclServiceImpl(new DefaultOrganization(), newAclPersistence(),
-                seriesService, assetManager, authorizationService, messageSender);
+        return new AclServiceImpl(new DefaultOrganization(), newAclPersistence(), index,
+                securityService);
       }
     };
   }
@@ -124,26 +139,23 @@ public class TestRestService extends AbstractAclServiceRestEndpoint {
   }
 
   @Override
-  protected AuthorizationService getAuthorizationService() {
-    return authorizationService;
-  }
-
-  @Override
   protected AssetManager getAssetManager() {
     return assetManager;
   }
 
   @Override
-  protected SeriesService getSeriesService() {
-    return seriesService;
-  }
-
-  private static MessageSender newMessageSender() {
-    return EasyMock.createNiceMock(MessageSender.class);
+  protected AuthorizationService getAuthorizationService() {
+    return authorizationService;
   }
 
   private static Workspace newWorkspace() {
     return EasyMock.createNiceMock(Workspace.class);
+  }
+
+  private static AclDb newAclPersistence() {
+    JpaAclDb db = new JpaAclDb();
+    db.setEntityManagerFactory(authorizationEMF);
+    return db;
   }
 
   private static AuthorizationService newAuthorizationService() {
@@ -156,9 +168,9 @@ public class TestRestService extends AbstractAclServiceRestEndpoint {
             .andReturn(Tuple.tuple(acl, AclScope.Series)).anyTimes();
     try {
       EasyMock.expect(authorizationService.setAcl(
-                EasyMock.anyObject(MediaPackage.class),
-                EasyMock.anyObject(AclScope.class),
-                EasyMock.anyObject(AccessControlList.class)))
+              EasyMock.anyObject(MediaPackage.class),
+              EasyMock.anyObject(AclScope.class),
+              EasyMock.anyObject(AccessControlList.class)))
               .andReturn(Tuple.tuple(mediapackage, attachment));
     } catch (MediaPackageException e) {
       throw new RuntimeException(e);
@@ -198,30 +210,6 @@ public class TestRestService extends AbstractAclServiceRestEndpoint {
     EasyMock.expect(assetManager.createQuery()).andReturn(query).anyTimes();
     EasyMock.replay(assetManager, version, query, predicate, select, result, record, snapshot);
     return assetManager;
-  }
-
-  private static AclDb newAclPersistence() {
-    return new JpaAclDb(persistenceEnvironment(authorizationEMF));
-  }
-
-  private static SeriesService newSeriesService() {
-    AccessControlList acl = new AccessControlList();
-    SeriesService seriesService = EasyMock.createNiceMock(SeriesService.class);
-    try {
-      EasyMock.expect(seriesService.getSeriesAccessControl((String) EasyMock.anyObject())).andReturn(acl).anyTimes();
-      EasyMock.expect(seriesService.updateAccessControl((String) EasyMock.anyObject(),
-              (AccessControlList) EasyMock.anyObject(), EasyMock.anyBoolean())).andThrow(new NotFoundException())
-              .andReturn(true);
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
-    EasyMock.replay(seriesService);
-    return seriesService;
-  }
-
-  @Override
-  protected String getEndpointBaseUrl() {
-    return BASE_URL.toString();
   }
 
 }

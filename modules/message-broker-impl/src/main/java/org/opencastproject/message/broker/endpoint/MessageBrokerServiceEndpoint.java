@@ -30,25 +30,39 @@ import org.opencastproject.util.doc.rest.RestQuery;
 import org.opencastproject.util.doc.rest.RestResponse;
 import org.opencastproject.util.doc.rest.RestService;
 
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
+
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.core.Response;
 
 @Path("/")
 @RestService(
-  name = "messagebrokerservice",
-  title = "Message Broker Service",
-  abstractText = "Handles publishers and subscribers connecting to message brokers",
-  notes = {})
+    name = "messagebrokerservice",
+    title = "Message Broker Service",
+    abstractText = "Handles publishers and subscribers connecting to message brokers",
+    notes = {})
+@Component(
+    property = {
+        "service.description=Message Broker REST Endpoint",
+        "opencast.service.type=org.opencastproject.message.broker.endpoint",
+        "opencast.service.path=/broker"
+    },
+    immediate = true,
+    service = { MessageBrokerServiceEndpoint.class }
+)
 public class MessageBrokerServiceEndpoint {
 
   private MessageReceiver messageReceiver;
   private MessageSender messageSender;
 
+  @Reference(name = "messageReceiver")
   public void setMessageReceiver(MessageReceiver messageReceiver) {
     this.messageReceiver = messageReceiver;
   }
 
+  @Reference(name = "messageSender")
   public void setMessageSender(MessageSender messageSender) {
     this.messageSender = messageSender;
   }
@@ -56,17 +70,18 @@ public class MessageBrokerServiceEndpoint {
   @GET
   @Path("status")
   @RestQuery(
-    name = "status",
-    description = "Return status of message broker",
-    returnDescription = "Return status of message broker",
-    reponses = {
+      name = "status",
+      description = "Return status of message broker",
+      returnDescription = "Return status of message broker",
+      responses = {
       @RestResponse(
-        responseCode = SC_NO_CONTENT,
-        description = "Connection to message broker ok"),
+          responseCode = SC_NO_CONTENT,
+          description = "Connection to message broker ok"),
       @RestResponse(
-        responseCode = SC_SERVICE_UNAVAILABLE,
-        description = "Not connected to message broker")
-    })
+          responseCode = SC_SERVICE_UNAVAILABLE,
+          description = "Not connected to message broker")
+      }
+  )
   public Response getStatus() {
     if (messageReceiver.isConnected() && messageSender.isConnected()) {
       return Response.status(SC_NO_CONTENT).build();

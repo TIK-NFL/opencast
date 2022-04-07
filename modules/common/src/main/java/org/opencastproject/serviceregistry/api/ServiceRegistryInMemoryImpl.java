@@ -349,17 +349,6 @@ public class ServiceRegistryInMemoryImpl implements ServiceRegistry {
    * {@inheritDoc}
    *
    * @see org.opencastproject.serviceregistry.api.ServiceRegistry#createJob(java.lang.String, java.lang.String,
-          Float)
-   */
-  @Override
-  public Job createJob(String type, String operation, Float jobLoad) throws ServiceRegistryException {
-    return createJob(type, operation, null, null, true, 1.0f);
-  }
-
-  /**
-   * {@inheritDoc}
-   *
-   * @see org.opencastproject.serviceregistry.api.ServiceRegistry#createJob(java.lang.String, java.lang.String,
    *      java.util.List)
    */
   @Override
@@ -379,28 +368,9 @@ public class ServiceRegistryInMemoryImpl implements ServiceRegistry {
     return createJob(type, operation, arguments, null, true, jobLoad);
   }
 
-  /**
-   * {@inheritDoc}
-   *
-   * @see org.opencastproject.serviceregistry.api.ServiceRegistry#createJob(java.lang.String, java.lang.String,
-          java.util.List, java.lang.String)
-   */
-  @Override
   public Job createJob(String type, String operation, List<String> arguments, String payload)
           throws ServiceRegistryException {
     return createJob(type, operation, arguments, payload, true);
-  }
-
-  /**
-   * {@inheritDoc}
-   *
-   * @see org.opencastproject.serviceregistry.api.ServiceRegistry#createJob(java.lang.String, java.lang.String,
-          java.util.List, java.lang.String, Float)
-   */
-  @Override
-  public Job createJob(String type, String operation, List<String> arguments, String payload, Float jobLoad)
-          throws ServiceRegistryException {
-    return createJob(type, operation, arguments, payload, true, jobLoad);
   }
 
   /**
@@ -425,18 +395,6 @@ public class ServiceRegistryInMemoryImpl implements ServiceRegistry {
   public Job createJob(String type, String operation, List<String> arguments, String payload, boolean queueable,
           Float jobLoad) throws ServiceRegistryException {
     return createJob(type, operation, arguments, payload, queueable, null, jobLoad);
-  }
-
-  /**
-   * {@inheritDoc}
-   *
-   * @see org.opencastproject.serviceregistry.api.ServiceRegistry#createJob(java.lang.String, java.lang.String,
-          java.util.List, java.lang.String, boolean, org.opencastproject.job.api.Job)
-   */
-  @Override
-  public Job createJob(String type, String operation, List<String> arguments, String payload, boolean queueable,
-          Job parentJob) throws ServiceRegistryException {
-    return createJob(type, operation, arguments, payload, queueable, parentJob, 1.0f);
   }
 
   /**
@@ -860,16 +818,6 @@ public class ServiceRegistryInMemoryImpl implements ServiceRegistry {
   /**
    * {@inheritDoc}
    *
-   * @see org.opencastproject.serviceregistry.api.ServiceRegistry#countOfAbnormalServices()
-   */
-  @Override
-  public long countOfAbnormalServices() throws ServiceRegistryException {
-    throw new UnsupportedOperationException("Operation not yet implemented");
-  }
-
-  /**
-   * {@inheritDoc}
-   *
    * @see org.opencastproject.serviceregistry.api.ServiceRegistry#count(java.lang.String,
    *      org.opencastproject.job.api.Job.Status)
    */
@@ -1070,6 +1018,20 @@ public class ServiceRegistryInMemoryImpl implements ServiceRegistry {
     List<HostRegistration> hostList = new LinkedList<HostRegistration>();
     hostList.addAll(hosts.values());
     return hostList;
+  }
+
+  @Override
+  public HostStatistics getHostStatistics() {
+    HostStatistics statistics = new HostStatistics();
+    for (Map.Entry<ServiceRegistrationInMemoryImpl, Set<Job>> entry: jobHosts.entrySet()) {
+      final ServiceRegistrationInMemoryImpl service = entry.getKey();
+      final long queued = entry.getValue().stream().filter(job -> job.getStatus() == Status.QUEUED).count();
+      final long running = entry.getValue().stream().filter(job -> job.getStatus() == Status.RUNNING).count();
+      final long host = service.host.hashCode();
+      statistics.addQueued(host, statistics.queuedJobs(host) + queued);
+      statistics.addRunning(host, statistics.runningJobs(host) + running);
+    }
+    return statistics;
   }
 
   @Override

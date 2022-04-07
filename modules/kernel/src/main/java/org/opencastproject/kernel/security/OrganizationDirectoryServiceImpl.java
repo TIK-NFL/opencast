@@ -39,9 +39,12 @@ import org.apache.commons.lang3.StringUtils;
 import org.osgi.service.cm.ConfigurationAdmin;
 import org.osgi.service.cm.ConfigurationException;
 import org.osgi.service.cm.ManagedServiceFactory;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Dictionary;
@@ -56,6 +59,14 @@ import java.util.concurrent.Executors;
  * Implements the organizational directory. As long as no organizations are published in the service registry, the
  * directory will contain the default organization as the only instance.
  */
+@Component(
+  property = {
+    "service.pid=org.opencastproject.organization",
+    "service.description=Organization Directory Service"
+  },
+  immediate = true,
+  service = { OrganizationDirectoryService.class, ManagedServiceFactory.class }
+)
 public class OrganizationDirectoryServiceImpl implements OrganizationDirectoryService, ManagedServiceFactory {
 
   /** The logger */
@@ -74,10 +85,13 @@ public class OrganizationDirectoryServiceImpl implements OrganizationDirectorySe
   public static final String ORG_NAME_KEY = "name";
 
   /** The managed property that specifies the organization server name */
-  public static final String ORG_SERVER_KEY = "server";
+  public static final String ORG_SERVER_PREFIX = "prop.org.opencastproject.host.";
 
-  /** The managed property that specifies the server port */
-  public static final String ORG_PORT_KEY = "port";
+  /** The default host in case no server is configured */
+  public static final String DEFAULT_SERVER_HOST = "localhost";
+
+  /** The default port in case no server is configured */
+  public static final int DEFAULT_SERVER_PORT = 8080;
 
   /** The managed property that specifies the organization administrative role */
   public static final String ORG_ADMIN_ROLE_KEY = "admin_role";
@@ -100,6 +114,7 @@ public class OrganizationDirectoryServiceImpl implements OrganizationDirectorySe
   private OrgCache cache;
 
   /** OSGi DI */
+  @Reference(name = "persistence")
   public void setOrgPersistence(OrganizationDatabase setOrgPersistence) {
     this.persistence = setOrgPersistence;
     this.cache = new OrgCache(60000, persistence);
@@ -109,6 +124,7 @@ public class OrganizationDirectoryServiceImpl implements OrganizationDirectorySe
    * @param configAdmin
    *          the configAdmin to set
    */
+  @Reference(name = "configAdmin")
   public void setConfigurationAdmin(ConfigurationAdmin configAdmin) {
     this.configAdmin = configAdmin;
   }
@@ -163,29 +179,43 @@ public class OrganizationDirectoryServiceImpl implements OrganizationDirectorySe
     // Gather the properties
     final String id = (String) properties.get(ORG_ID_KEY);
     final String name = (String) properties.get(ORG_NAME_KEY);
-    final String server = (String) properties.get(ORG_SERVER_KEY);
 
     // Make sure the configuration meets the minimum requirements
     if (StringUtils.isBlank(id))
       throw new ConfigurationException(ORG_ID_KEY, ORG_ID_KEY + " must be set");
-    if (StringUtils.isBlank(server))
-      throw new ConfigurationException(ORG_SERVER_KEY, ORG_SERVER_KEY + " must be set");
 
-    String[] serverUrls = StringUtils.split(server, ",");
-
-    final String portAsString = StringUtils.trimToNull((String) properties.get(ORG_PORT_KEY));
-    final int port = portAsString != null ? Integer.parseInt(portAsString) : 80;
     final String adminRole = (String) properties.get(ORG_ADMIN_ROLE_KEY);
     final String anonRole = (String) properties.get(ORG_ANONYMOUS_ROLE_KEY);
 
     // Build the properties map
     final Map<String, String> orgProperties = new HashMap<String, String>();
+    HashMap<String, Integer> servers = new HashMap<>();
+
     for (Enumeration<?> e = properties.keys(); e.hasMoreElements();) {
       final String key = (String) e.nextElement();
+
       if (!key.startsWith(ORG_PROPERTY_PREFIX)) {
         continue;
       }
+
+      if (key.startsWith(ORG_SERVER_PREFIX)) {
+        String tenantSpecificHost = StringUtils.trimToNull((String) properties.get(key));
+        if (tenantSpecificHost != null) {
+          try {
+            Tuple<String, Integer> hostPort = hostAndPort(new URL(tenantSpecificHost));
+            servers.put(hostPort.getA(), hostPort.getB());
+          } catch (MalformedURLException malformedURLException) {
+            logger.error("{} is not a URL", tenantSpecificHost);
+          }
+        }
+      }
+
       orgProperties.put(key.substring(ORG_PROPERTY_PREFIX.length()), (String) properties.get(key));
+    }
+
+    if (servers.isEmpty()) {
+      logger.debug("No server URL configured for organization {}, setting default {}:{}", name, DEFAULT_SERVER_HOST, DEFAULT_SERVER_PORT);
+      servers.put(DEFAULT_SERVER_HOST, DEFAULT_SERVER_PORT);
     }
 
     // Load the existing organization or create a new one
@@ -194,10 +224,9 @@ public class OrganizationDirectoryServiceImpl implements OrganizationDirectorySe
       try {
         org = (JpaOrganization) persistence.getOrganization(id);
         org.setName(name);
-        for (String serverUrl : serverUrls) {
-          if (StringUtils.isNotBlank(serverUrl)) {
-            org.addServer(serverUrl, port);
-          }
+        // TODO: should this really be append only?
+        for (Map.Entry<String, Integer> server : servers.entrySet()) {
+          org.addServer(server.getKey(), server.getValue());
         }
         org.setAdminRole(adminRole);
         org.setAnonymousRole(anonRole);
@@ -206,12 +235,6 @@ public class OrganizationDirectoryServiceImpl implements OrganizationDirectorySe
         persistence.storeOrganization(org);
         fireOrganizationUpdated(org);
       } catch (NotFoundException e) {
-        HashMap<String, Integer> servers = new HashMap<String, Integer>();
-        for (String serverUrl : serverUrls) {
-          if (StringUtils.isNotBlank(serverUrl)) {
-            servers.put(serverUrl, port);
-          }
-        }
         org = new JpaOrganization(id, name, servers, adminRole, anonRole, orgProperties);
         logger.info("Creating organization '{}'", id);
         persistence.storeOrganization(org);

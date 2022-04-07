@@ -44,17 +44,17 @@ Opencast workflows are defined in XML.  The structure of a Opencast workflow loo
 
 ## Create a Workflow
 
-This sections will walk you through creating a custom workflow, which will encode ingested tracks to defined output
+This section will walk you through creating a custom workflow, which will encode ingested tracks to defined output
 format.
 
-### Encoding Profiles
+### Step 1: Encoding Profiles
 
 First create or select the encoding profiles you want to use. For more details on this, have a look at the [Encoding
 Profile Configuration Guide](encoding.md). For this guide we assume that we have an encoding profile `mov-low.http`
 which creates a distribution format definition for mp4 video and a `feed-cover.http` encoding profile to create
 thumbnail images for the videos.
 
-### Describe the Workflow
+### Step 2: Describe the Workflow
 
 Start by naming the workflow and giving it a meaningful description:
 
@@ -106,12 +106,12 @@ Start by naming the workflow and giving it a meaningful description:
     * *delete*: Usable for deletion of events with publications
     * *editor*: Usable from the video editor
 * The `displayOrder` is an integer that indicates in what order workflow definitions shall be displayed by clients.
-  If ommitted, the `displayOrder` defaults to `0`. Clients are expected to list workflow definitions in descending order.
+  If omitted, the `displayOrder` defaults to `0`. Clients are expected to list workflow definitions in descending order.
 * The `description` allows you to describe the workflow in detail. Blank lines are formatted as newlines, while single
   line breaks are ignored so that the XML remains compact and readable even with long paragraphs.
 
 
-### Inspect the Media
+### Step 3: Inspect the Media
 
 The first operation will be to inspect the media for technical metadata, such as format and length:
 
@@ -138,7 +138,7 @@ The first operation will be to inspect the media for technical metadata, such as
 The *fail-on-error* attribute is a boolean determining whether the workflow will throw an error to the
 exception-handler-workflow or simply proceed with the remaining operations.
 
-### Encoding
+### Step 4: Encoding
 
 The next operations will encode the media to the Mp4 format:
 
@@ -155,7 +155,7 @@ The next operations will encode the media to the Mp4 format:
 
         <!-- encode: mp4 -->
         <operation
-          id="compose"
+          id="encode"
           fail-on-error="true"
           exception-handler-workflow="error"
           description="Encode camera to mp4">
@@ -168,7 +168,7 @@ The next operations will encode the media to the Mp4 format:
         </operation>
 
         <operation
-          id="compose"
+          id="encode"
           fail-on-error="true"
           exception-handler-workflow="error"
           description="Encode screen to mp4">
@@ -190,7 +190,7 @@ The next operations will encode the media to the Mp4 format:
 * The `encoding-profile` attribute refers to an encoding profile defined in `etc/encoding`.
 
 
-### Encode to Thumbnail
+### Step 5: Encode to Thumbnail
 
 The next operations will create thumbnails from the media:
 
@@ -235,7 +235,7 @@ The next operations will create thumbnails from the media:
 
 * The time attribute determines the approximate frame of the source media is used. The time unit is in seconds.
 
-### Distribute the Media
+### Step 6: Distribute the Media
 
 The next operation copies the encoded media to the Opencast distribution channel:
 
@@ -262,6 +262,7 @@ The next operation copies the encoded media to the Opencast distribution channel
 
 * The publish-engage operation uses all media tagged as *rss* or *atom* as input.
 
+<!-- _Are the next sections still part of Creating a Custom Workflow? -->
 ## Accept User Input
 
 Workflow definitions may optionally include variables to be replaced by user input. For instance, this may be used to
@@ -297,6 +298,13 @@ selection will be used to replace the `${someaction}` variable in the workflow.
 This input can also be sent by capture agents, using the ingest endpoints. Please note that capture agents usually do
 not load the configuration panel. Hence defaults set in the user interface will not apply to ingests. To circumvent
 this, the [defaults operation](../workflowoperationhandlers/defaults-woh.md) can be used.
+
+## Organisation Properties
+
+Workflows can access organisation properties stored as `prop.*` in the organisation configuration
+(`etc/org.opencastproject.organization-mh_default_org.cfg` for the default organisation `mh_default_org`). This allows
+for organisation specific configuration of your workflow. To access the property use the `org_` prefix, e.g.
+`prop.my.var` can be access using `${org_my.var}`.
 
 ## Conditional Execution
 

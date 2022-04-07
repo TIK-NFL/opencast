@@ -30,6 +30,7 @@ import org.opencastproject.mediapackage.MediaPackageElement;
 import org.opencastproject.mediapackage.MediaPackageElementParser;
 import org.opencastproject.mediapackage.MediaPackageException;
 import org.opencastproject.serviceregistry.api.RemoteBase;
+import org.opencastproject.util.XmlSafeParser;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpResponse;
@@ -45,8 +46,6 @@ import org.w3c.dom.NodeList;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import javax.xml.parsers.DocumentBuilderFactory;
 
 /**
  * Proxies a set of remote composer services for use as a JVM-local service. Remote services are selected at random.
@@ -82,8 +81,9 @@ public class CaptionServiceRemoteImpl extends RemoteBase implements CaptionServi
       params.add(new BasicNameValuePair("captions", MediaPackageElementParser.getAsXml(input)));
       params.add(new BasicNameValuePair("input", inputFormat));
       params.add(new BasicNameValuePair("output", outputFormat));
-      if (StringUtils.isNotBlank(language))
+      if (StringUtils.isNotBlank(language)) {
         params.add(new BasicNameValuePair("language", language));
+      }
       post.setEntity(new UrlEncodedFormEntity(params, "UTF-8"));
     } catch (Exception e) {
       throw new CaptionConverterException(e);
@@ -126,7 +126,7 @@ public class CaptionServiceRemoteImpl extends RemoteBase implements CaptionServi
       response = getResponse(post);
       if (response != null) {
         List<String> langauges = new ArrayList<String>();
-        Document doc = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+        Document doc = XmlSafeParser.newDocumentBuilderFactory().newDocumentBuilder()
                 .parse(EntityUtils.toString(response.getEntity(), "UTF-8"));
         NodeList languages = doc.getElementsByTagName("languages");
         for (int i = 0; i < languages.getLength(); i++) {

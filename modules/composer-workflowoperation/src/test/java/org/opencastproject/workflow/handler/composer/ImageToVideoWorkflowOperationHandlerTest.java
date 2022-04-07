@@ -122,7 +122,6 @@ public class ImageToVideoWorkflowOperationHandlerTest {
     String targetTags = "engage,rss";
     Map<String, String> configurations = new HashMap<String, String>();
     configurations.put("source-flavor", "image/intro");
-    configurations.put("source-tag", "intro");
     configurations.put("target-tags", targetTags);
     configurations.put("target-flavor", "video/intro");
     configurations.put("profile", "image-movie");
@@ -151,7 +150,7 @@ public class ImageToVideoWorkflowOperationHandlerTest {
 
     try {
       // run the operation handler
-      WorkflowOperationResult result = getWorkflowOperationResult(mp, configurations);
+      getWorkflowOperationResult(mp, configurations);
       Assert.fail();
     } catch (WorkflowOperationException e) {
       Assert.assertNotNull("Duration is required!", e);

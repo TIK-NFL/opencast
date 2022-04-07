@@ -120,13 +120,7 @@ public class LdapUserProviderInstance implements UserProvider, CachingUserProvid
    * @param password
    *          the user credentials
    * @param roleAttributesGlob
-   *          the comma separate list of ldap attributes to treat as roles
-   * @param rolePrefix
-   *          a prefix to be prepended to all the roles read from the LDAP server
-   * @param extraRoles
-   *          an array of extra roles to add to all the users
-   * @param excludePrefixes
-   *          an array of role prefixes. The roles starting with any of these will not be prepended with the rolePrefix
+   *          the comma separate list of ldap attributes to treat as roles or to consider for the ldapAssignmentRoleMap
    * @param convertToUppercase
    *          whether or not the role names will be converted to uppercase
    * @param cacheSize
@@ -137,10 +131,23 @@ public class LdapUserProviderInstance implements UserProvider, CachingUserProvid
    *          a reference to Opencast's security service
    */
   // CHECKSTYLE:OFF
-  LdapUserProviderInstance(String pid, Organization organization, String searchBase, String searchFilter, String url,
-          String userDn, String password, String roleAttributesGlob, String rolePrefix, String[] extraRoles,
-          String[] excludePrefixes, boolean convertToUppercase, int cacheSize, int cacheExpiration,
-          SecurityService securityService) {
+  LdapUserProviderInstance(
+      String pid,
+      Organization organization,
+      String searchBase,
+      String searchFilter,
+      String url,
+      String userDn,
+      String password,
+      String roleAttributesGlob,
+      String rolePrefix,
+      String[] extraRoles,
+      String[] excludePrefixes,
+      boolean convertToUppercase,
+      int cacheSize,
+      int cacheExpiration,
+      SecurityService securityService
+  ) {
     // CHECKSTYLE:ON
     this.organization = organization;
     this.securityService = securityService;
@@ -174,10 +181,12 @@ public class LdapUserProviderInstance implements UserProvider, CachingUserProvid
 
       mapper.setRoleAttributes(roleAttributesGlob.split(","));
 
-      if (convertToUppercase)
+      if (convertToUppercase) {
         this.rolePrefix = StringUtils.trimToEmpty(rolePrefix).toUpperCase();
-      else
+      }
+      else {
         this.rolePrefix = StringUtils.trimToEmpty(rolePrefix);
+      }
 
       logger.debug("Role prefix set to: \"{}\"", this.rolePrefix);
 
@@ -193,10 +202,12 @@ public class LdapUserProviderInstance implements UserProvider, CachingUserProvid
           for (String excludePrefix : excludePrefixes) {
             String cleanPrefix = excludePrefix.trim();
             if (!cleanPrefix.isEmpty()) {
-              if (convertToUppercase)
+              if (convertToUppercase) {
                 setExcludePrefixes.add(cleanPrefix.toUpperCase());
-              else
+              }
+              else {
                 setExcludePrefixes.add(cleanPrefix);
+              }
             }
           }
 
@@ -227,6 +238,8 @@ public class LdapUserProviderInstance implements UserProvider, CachingUserProvid
         }
       }
     }
+
+
 
     // Setup the caches
     cache = CacheBuilder.newBuilder().maximumSize(cacheSize).expireAfterWrite(cacheExpiration, TimeUnit.MINUTES)
@@ -358,9 +371,12 @@ public class LdapUserProviderInstance implements UserProvider, CachingUserProvid
           strAuthority = rolePrefix + strAuthority;
         }
 
+        logger.debug("Adding role " + strAuthority + " for user " + userName);
+
         // Finally, add the role itself
         roles.add(new JaxbRole(strAuthority, jaxbOrganization));
       }
+
       User user = new JaxbUser(userDetails.getUsername(), PROVIDER_NAME, jaxbOrganization, roles);
       cache.put(userName, user);
       return user;
@@ -384,8 +400,9 @@ public class LdapUserProviderInstance implements UserProvider, CachingUserProvid
 
   @Override
   public Iterator<User> findUsers(String query, int offset, int limit) {
-    if (query == null)
+    if (query == null) {
       throw new IllegalArgumentException("Query must be set");
+    }
     // TODO implement a LDAP wildcard search
     // FIXME We return the current user, rather than an empty list, to make sure the current user's role is displayed in
     // the admin UI (MH-12526).
@@ -401,7 +418,8 @@ public class LdapUserProviderInstance implements UserProvider, CachingUserProvid
   @Override
   public Iterator<User> getUsers() {
     // TODO implement LDAP get all users
-    // FIXME We return the current user, rather than an empty list, to make sure the current user's role is displayed in
+    // FIXME We return the current user, rather than an empty list,
+    // to make sure the current user's role is displayed in
     // the admin UI (MH-12526).
     User currentUser = securityService.getUser();
     if (loadUser(currentUser.getUsername()) != null) {

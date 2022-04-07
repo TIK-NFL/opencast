@@ -27,12 +27,8 @@ import static org.opencastproject.util.data.functions.Misc.chuck;
 
 import org.opencastproject.util.data.Either;
 
-import com.entwinemedia.fn.data.ImmutableIteratorBase;
-
 import org.apache.commons.io.IOUtils;
 import org.w3c.dom.Document;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 
 import java.io.ByteArrayInputStream;
@@ -40,8 +36,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.Iterator;
-import java.util.NoSuchElementException;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -49,7 +43,6 @@ import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
-import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
@@ -59,10 +52,10 @@ public final class XmlUtil {
   private static final DocumentBuilderFactory dbf;
 
   static {
-    nsDbf = DocumentBuilderFactory.newInstance();
+    nsDbf = XmlSafeParser.newDocumentBuilderFactory();
     nsDbf.setNamespaceAware(true);
     //
-    dbf = DocumentBuilderFactory.newInstance();
+    dbf = XmlSafeParser.newDocumentBuilderFactory();
     dbf.setNamespaceAware(false);
   }
 
@@ -84,16 +77,6 @@ public final class XmlUtil {
     return parseNs(fromXmlString(xml));
   }
 
-  /** Parsing of <code>src</code> without namespaces. */
-  public static Either<Exception, Document> parse(InputSource src) {
-    try {
-      DocumentBuilder docBuilder = dbf.newDocumentBuilder();
-      return right(docBuilder.parse(src));
-    } catch (Exception e) {
-      return left(e);
-    }
-  }
-
   /**
    * Writes an xml representation to a stream.
    *
@@ -108,7 +91,8 @@ public final class XmlUtil {
     try {
       DOMSource domSource = new DOMSource(doc);
       StreamResult result = new StreamResult(out);
-      Transformer transformer = TransformerFactory.newInstance().newTransformer();
+      Transformer transformer = XmlSafeParser.newTransformerFactory()
+              .newTransformer();
       transformer.setOutputProperty(OutputKeys.VERSION, doc.getXmlVersion());
       transformer.transform(domSource, result);
     } catch (TransformerException e) {
@@ -173,31 +157,4 @@ public final class XmlUtil {
     }
   }
 
-  /** Make a {@link org.w3c.dom.NodeList} iterable. */
-  public static <A extends Node> Iterable<A> iterable(final NodeList nl) {
-    return new Iterable<A>() {
-      @Override
-      public Iterator<A> iterator() {
-        return new ImmutableIteratorBase<A>() {
-          private int index = 0;
-
-          @Override
-          public boolean hasNext() {
-            return index < nl.getLength();
-          }
-
-          @Override
-          public A next() {
-            if (hasNext()) {
-              final Node next = nl.item(index);
-              index = index + 1;
-              return (A) next;
-            } else {
-              throw new NoSuchElementException();
-            }
-          }
-        };
-      }
-    };
-  }
 }

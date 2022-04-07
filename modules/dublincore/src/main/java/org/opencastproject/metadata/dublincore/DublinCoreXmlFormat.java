@@ -25,8 +25,8 @@ import org.opencastproject.mediapackage.EName;
 import org.opencastproject.mediapackage.XMLCatalogImpl;
 import org.opencastproject.mediapackage.XMLCatalogImpl.CatalogEntry;
 import org.opencastproject.util.XmlNamespaceContext;
+import org.opencastproject.util.XmlSafeParser;
 
-import com.entwinemedia.fn.Fn;
 import com.entwinemedia.fn.data.Opt;
 
 import org.apache.commons.lang3.StringUtils;
@@ -58,7 +58,6 @@ import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Result;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
-import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.sax.SAXResult;
 
@@ -155,44 +154,10 @@ public final class DublinCoreXmlFormat extends DefaultHandler {
     }
   }
 
-  /** {@link #read(String)} as a function, returning none on error. */
-  public static final Fn<String, Opt<DublinCoreCatalog>> readOptFromString = new Fn<String, Opt<DublinCoreCatalog>>() {
-    @Override public Opt<DublinCoreCatalog> apply(String xml) {
-      return readOpt(xml);
-    }
-  };
-
   @Nonnull
   public static DublinCoreCatalog read(Node xml)
       throws TransformerException {
     return new DublinCoreXmlFormat().readImpl(xml);
-  }
-
-  @Nonnull
-  public static DublinCoreCatalog read(InputSource xml)
-      throws IOException, SAXException, ParserConfigurationException {
-    return new DublinCoreXmlFormat().readImpl(xml);
-  }
-
-  // Optional read to optionally instantiate catalog with intentionally empty elements
-  // used to remove existing DublinCore catalog values during a merge update.
-  @Nonnull
-  public static DublinCoreCatalog read(String xml, boolean includeEmptiedElements)
-          throws IOException, SAXException, ParserConfigurationException {
-    return new DublinCoreXmlFormat(includeEmptiedElements).readImpl(
-        new InputSource(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8))));
-  }
-
-  @Nonnull
-  public static DublinCoreCatalog read(Node xml, boolean includeEmptiedElements)
-      throws TransformerException {
-    return new DublinCoreXmlFormat(includeEmptiedElements).readImpl(xml);
-  }
-
-  @Nonnull
-  public static DublinCoreCatalog read(InputSource xml, boolean includeEmptiedElements)
-      throws IOException, SAXException, ParserConfigurationException {
-    return new DublinCoreXmlFormat(includeEmptiedElements).readImpl(xml);
   }
 
   @Nonnull
@@ -245,7 +210,7 @@ public final class DublinCoreXmlFormat extends DefaultHandler {
     // Create the DOM document
     final Document doc;
     {
-      final DocumentBuilderFactory docBuilderFactory = DocumentBuilderFactory.newInstance();
+      final DocumentBuilderFactory docBuilderFactory = XmlSafeParser.newDocumentBuilderFactory();
       docBuilderFactory.setNamespaceAware(true);
       doc = docBuilderFactory.newDocumentBuilder().newDocument();
     }
@@ -261,19 +226,11 @@ public final class DublinCoreXmlFormat extends DefaultHandler {
     }
   }
 
-  public static String writeString(DublinCoreCatalog dc) {
-    try {
-      return dc.toXmlString();
-    } catch (IOException e) {
-      throw new IllegalStateException(String.format("Error serializing the episode dublincore catalog %s.", dc), e);
-    }
-  }
-
   // SAX
 
   private DublinCoreCatalog readImpl(Node node) throws TransformerException {
     final Result outputTarget = new SAXResult(this);
-    final Transformer t = TransformerFactory.newInstance().newTransformer();
+    final Transformer t = XmlSafeParser.newTransformerFactory().newTransformer();
     t.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
     t.transform(new DOMSource(node), outputTarget);
     return dc;
@@ -281,7 +238,7 @@ public final class DublinCoreXmlFormat extends DefaultHandler {
 
   private DublinCoreCatalog readImpl(InputSource in)
           throws ParserConfigurationException, SAXException, IOException {
-    final SAXParserFactory factory = SAXParserFactory.newInstance();
+    final SAXParserFactory factory = XmlSafeParser.newSAXParserFactory();
     // no DTD
     factory.setValidating(false);
     // namespaces!

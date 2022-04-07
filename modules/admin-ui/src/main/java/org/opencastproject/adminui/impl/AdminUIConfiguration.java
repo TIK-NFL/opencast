@@ -26,17 +26,26 @@ import org.opencastproject.mediapackage.MediaPackageElementFlavor;
 
 import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.osgi.service.cm.ConfigurationException;
-import org.osgi.service.cm.ManagedService;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Modified;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
-import java.util.Dictionary;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
-public class AdminUIConfiguration implements ManagedService {
+@Component(
+  immediate = true,
+  service = AdminUIConfiguration.class,
+  property = {
+    "service.description=Admin UI - Configuration",
+    "service.pid=org.opencastproject.adminui"
+  }
+)
+public class AdminUIConfiguration {
 
   /** This helper class provides all information relevant for the automatic distribution of
       thumbnails to a specific type of publication channels */
@@ -258,10 +267,12 @@ public class AdminUIConfiguration implements ManagedService {
     return retractWorkflowId;
   }
 
-  @Override
-  public void updated(Dictionary<String, ?> properties) throws ConfigurationException {
-    if (properties == null)
+  @Activate
+  @Modified
+  public void modified(Map<String, Object> properties) {
+    if (properties == null) {
       return;
+    }
 
     // Preview subtype
     previewSubtype = StringUtils.defaultString((String) properties.get(OPT_PREVIEW_SUBTYPE), DEFAULT_PREVIEW_SUBTYPE);
@@ -391,5 +402,6 @@ public class AdminUIConfiguration implements ManagedService {
     retractWorkflowId = StringUtils.defaultString((String) properties.get(OPT_RETRACT_WORKFLOW_ID),
       DEFAULT_RETRACT_WORKFLOW_ID);
     logger.debug("Retract workflow ID set to {}", retractWorkflowId);
+    logger.info("Configuration updated");
   }
 }

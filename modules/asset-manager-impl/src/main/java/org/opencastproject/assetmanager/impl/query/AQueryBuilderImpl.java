@@ -35,7 +35,7 @@ import org.opencastproject.assetmanager.api.query.Predicate;
 import org.opencastproject.assetmanager.api.query.PropertyField;
 import org.opencastproject.assetmanager.api.query.Target;
 import org.opencastproject.assetmanager.api.query.VersionField;
-import org.opencastproject.assetmanager.impl.AbstractAssetManager;
+import org.opencastproject.assetmanager.impl.AssetManagerImpl;
 import org.opencastproject.assetmanager.impl.RuntimeTypes;
 import org.opencastproject.assetmanager.impl.persistence.EntityPaths;
 import org.opencastproject.assetmanager.impl.persistence.QPropertyDto;
@@ -57,9 +57,9 @@ import javax.annotation.Nonnull;
 public final class AQueryBuilderImpl implements AQueryBuilder, EntityPaths {
   private static final Stream<QSnapshotDto> FROM_SNAPSHOT = $Q_SNAPSHOT;
 
-  private final AbstractAssetManager am;
+  private final AssetManagerImpl am;
 
-  public AQueryBuilderImpl(AbstractAssetManager am) {
+  public AQueryBuilderImpl(AssetManagerImpl am) {
     this.am = am;
   }
 
@@ -97,7 +97,9 @@ public final class AQueryBuilderImpl implements AQueryBuilder, EntityPaths {
 //                .where(new Fn<EntityPath<?>, BooleanExpression>() {
 //                  @Override public BooleanExpression apply(EntityPath<?> path) {
 //                    // Wildcard deletion. Disabled as of ticket CERV-1158. Kept for potentially later reference.
-//                    // return !"".equals(owner) ? Q_SNAPSHOT.owner.eq(owner).and(c.where.apply(path)) : c.where.apply(path);
+//                    // return !"".equals(owner)
+//                    //     ? Q_SNAPSHOT.owner.eq(owner).and(c.where.apply(path))
+//                    //     : c.where.apply(path);
 //                    return Q_SNAPSHOT.owner.eq(owner).and(c.where.apply(path));
 //                  }
 //                });
@@ -150,6 +152,10 @@ public final class AQueryBuilderImpl implements AQueryBuilder, EntityPaths {
       }
 
     };
+  }
+
+  @Override public Field<String> mediapackageId() {
+    return new SimpleSnapshotField<>(Q_SNAPSHOT.mediaPackageId);
   }
 
   /**
@@ -209,22 +215,6 @@ public final class AQueryBuilderImpl implements AQueryBuilder, EntityPaths {
     return new SnapshotBasedPredicate() {
       @Override protected BooleanExpression mkSnapshotFieldPredicate(QSnapshotDto e) {
         return e.storageId.eq(storage);
-      }
-    };
-  }
-
-  @Override public Field<Availability> availability() {
-    return new AbstractSnapshotField<Availability, String>(Q_SNAPSHOT.availability) {
-      @Override protected String extract(Availability availability) {
-        return availability.name();
-      }
-    };
-  }
-
-  @Override public Field<String> storage() {
-    return new AbstractSnapshotField<String, String>(Q_SNAPSHOT.storageId) {
-      @Override protected String extract(String storageId) {
-        return storageId;
       }
     };
   }
@@ -314,11 +304,6 @@ public final class AQueryBuilderImpl implements AQueryBuilder, EntityPaths {
     };
   }
 
-  @Override public Field zero() {
-    // TODO implement zero element of fields
-    throw new UnsupportedOperationException();
-  }
-
   @Override public Predicate always() {
     return new AbstractPredicate() {
       /* SELECT */
@@ -363,7 +348,9 @@ public final class AQueryBuilderImpl implements AQueryBuilder, EntityPaths {
     return new AbstractTarget() {
       @Override public SelectQueryContribution contributeSelect(JPAQueryFactory f) {
         // join on the media package ID and the given expressions
-        final BooleanExpression on = Q_PROPERTY.mediaPackageId.eq(Q_SNAPSHOT.mediaPackageId).and(JpaFns.anyOf(onExpressions));
+        final BooleanExpression on = Q_PROPERTY.mediaPackageId
+            .eq(Q_SNAPSHOT.mediaPackageId)
+            .and(JpaFns.anyOf(onExpressions));
         return SelectQueryContribution.mk().join($(new Join(Q_SNAPSHOT, Q_PROPERTY, on))).fetch($Q_PROPERTY);
       }
 

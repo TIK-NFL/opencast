@@ -25,9 +25,7 @@ package org.opencastproject.search.impl.solr;
 import static org.opencastproject.security.api.Permissions.Action.READ;
 import static org.opencastproject.security.api.Permissions.Action.WRITE;
 import static org.opencastproject.util.RequireUtil.notNull;
-import static org.opencastproject.util.data.Collections.flatMap;
 import static org.opencastproject.util.data.Collections.head;
-import static org.opencastproject.util.data.Collections.map;
 import static org.opencastproject.util.data.Option.option;
 
 import org.opencastproject.mediapackage.Attachment;
@@ -35,10 +33,10 @@ import org.opencastproject.mediapackage.Catalog;
 import org.opencastproject.mediapackage.MediaPackage;
 import org.opencastproject.mediapackage.MediaPackageElement;
 import org.opencastproject.mediapackage.MediaPackageElements;
-import org.opencastproject.mediapackage.MediaPackageException;
 import org.opencastproject.mediapackage.MediaPackageParser;
 import org.opencastproject.mediapackage.MediaPackageReference;
 import org.opencastproject.metadata.api.MetadataValue;
+import org.opencastproject.metadata.api.MetadataValues;
 import org.opencastproject.metadata.api.StaticMetadata;
 import org.opencastproject.metadata.api.StaticMetadataService;
 import org.opencastproject.metadata.api.util.Interval;
@@ -92,7 +90,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -102,8 +99,10 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 /**
  * Utility class used to manage the search index.
@@ -172,13 +171,8 @@ public class SolrIndexManager {
 
   /** Dynamic reference. */
   public void setStaticMetadataServices(List<StaticMetadataService> mdServices) {
-    this.mdServices = new ArrayList<StaticMetadataService>(mdServices);
-    Collections.sort(this.mdServices, new Comparator<StaticMetadataService>() {
-      @Override
-      public int compare(StaticMetadataService a, StaticMetadataService b) {
-        return b.getPriority() - a.getPriority();
-      }
-    });
+    this.mdServices = new ArrayList<>(mdServices);
+    this.mdServices.sort((a, b) -> b.getPriority() - a.getPriority());
   }
 
   /**
@@ -208,6 +202,49 @@ public class SolrIndexManager {
     try {
       solrServer.deleteByQuery("*:*");
       solrServer.commit();
+    } catch (IOException e) {
+      throw new SolrServerException(e);
+    }
+  }
+
+  /**
+   * Removes the entry with the given <code>id</code> from the database.
+   *
+   * @param seriesid
+   *          identifier of the series or episode to delete
+   * @param deletionDate
+   *          the deletion date
+   * @throws SolrServerException
+   *           if an errors occurs while talking to solr
+   */
+  public boolean deleteSeries(String seriesid, Date deletionDate) throws SolrServerException {
+    try {
+      QueryResponse solrResponse = null;
+      try {
+        SolrQuery query = new SolrQuery(Schema.ID + ":" + ClientUtils.escapeQueryChars(seriesid) + " AND -"
+                + Schema.OC_DELETED + ":[* TO *]");
+        solrResponse = solrServer.query(query);
+      } catch (Exception e1) {
+        throw new SolrServerException(e1);
+      }
+
+      if (solrResponse.getResults().size() == 0) {
+        logger.warn("Trying to delete non-existing Series {} from the search index", seriesid);
+        return false;
+      }
+
+      // Use all existing fields
+      SolrDocument doc = solrResponse.getResults().get(0);
+      SolrInputDocument inputDocument = new SolrInputDocument();
+      for (String field : doc.getFieldNames()) {
+        inputDocument.setField(field, doc.get(field));
+      }
+
+      // Set the oc_deleted field to the current date, then update
+      Schema.setOcDeleted(inputDocument, deletionDate);
+      solrServer.add(inputDocument);
+      solrServer.commit();
+      return true;
     } catch (IOException e) {
       throw new SolrServerException(e);
     }
@@ -248,8 +285,9 @@ public class SolrIndexManager {
         inputDocument.setField(field, doc.get(field));
       }
 
-      // Set the oc_deleted field to the current date, then update
+      // Set the oc_deleted and oc_modified field to the given date, then update
       Schema.setOcDeleted(inputDocument, deletionDate);
+      Schema.setOcModified(inputDocument, deletionDate);
       solrServer.add(inputDocument);
       solrServer.commit();
       return true;
@@ -273,31 +311,49 @@ public class SolrIndexManager {
    * @throws SolrServerException
    *           if an errors occurs while talking to solr
    */
-  public boolean add(MediaPackage sourceMediaPackage, AccessControlList acl, Date now) throws SolrServerException,
-          UnauthorizedException {
+  public boolean add(MediaPackage sourceMediaPackage, AccessControlList acl, AccessControlList seriesAcl, Date now)
+          throws SolrServerException, UnauthorizedException {
     try {
       SolrInputDocument episodeDocument = createEpisodeInputDocument(sourceMediaPackage, acl);
       Schema.setOcModified(episodeDocument, now);
 
-      SolrInputDocument seriesDocument = createSeriesInputDocument(sourceMediaPackage.getSeries(), acl);
-      if (seriesDocument != null)
+      SolrInputDocument seriesDocument = createSeriesInputDocument(sourceMediaPackage.getSeries(), seriesAcl);
+      if (seriesDocument != null) {
         Schema.enrich(episodeDocument, seriesDocument);
-
-      // If neither an episode nor a series was contained, there is no point in trying to update
-      if (episodeDocument == null && seriesDocument == null) {
-        logger.warn("Neither episode nor series metadata found");
-        return false;
       }
 
       // Post everything to the search index
-      if (episodeDocument != null)
-        solrServer.add(episodeDocument);
-      if (seriesDocument != null)
+      solrServer.add(episodeDocument);
+      if (seriesDocument != null) {
         solrServer.add(seriesDocument);
+      }
       solrServer.commit();
       return true;
     } catch (Exception e) {
-      throw new SolrServerException(e);
+      throw new SolrServerException(
+          String.format("Unable to add media package %s to index", sourceMediaPackage.getIdentifier()), e);
+    }
+  }
+
+  /**
+   * Posts a series to Solr. If the entry already exists, this will update the series.
+   *
+   * @param seriesId
+   *          the series to post
+   * @param acl
+   *          the access control list for this series
+   * @throws SolrServerException
+   *           if an errors occurs while talking to solr
+   */
+  public void addSeries(final String seriesId, final AccessControlList acl) throws SolrServerException {
+    try {
+      SolrInputDocument seriesDocument = createSeriesInputDocument(seriesId, acl);
+      if (seriesDocument != null) {
+        solrServer.add(seriesDocument);
+        solrServer.commit();
+      }
+    } catch (Exception e) {
+      throw new SolrServerException(String.format("Unable to add series %s to index", seriesId), e);
     }
   }
 
@@ -311,6 +367,8 @@ public class SolrIndexManager {
    *          the media package to post
    * @param acl
    *          the access control list for this mediapackage
+   * @param seriesAcl
+   *          the access control list for the series
    * @param deletionDate
    *          the deletion date
    * @param modificationDate
@@ -319,24 +377,29 @@ public class SolrIndexManager {
    * @throws SolrServerException
    *           if an errors occurs while talking to solr
    */
-  public boolean add(MediaPackage sourceMediaPackage, AccessControlList acl, Date deletionDate, Date modificationDate)
+  public boolean add(MediaPackage sourceMediaPackage, AccessControlList acl,
+      AccessControlList seriesAcl, Date deletionDate,
+      Date modificationDate)
           throws SolrServerException {
     try {
       SolrInputDocument episodeDocument = createEpisodeInputDocument(sourceMediaPackage, acl);
 
-      SolrInputDocument seriesDocument = createSeriesInputDocument(sourceMediaPackage.getSeries(), acl);
-      if (seriesDocument != null)
+      SolrInputDocument seriesDocument = createSeriesInputDocument(sourceMediaPackage.getSeries(), seriesAcl);
+      if (seriesDocument != null) {
         Schema.enrich(episodeDocument, seriesDocument);
+      }
 
       Schema.setOcModified(episodeDocument, modificationDate);
-      if (deletionDate != null)
+      if (deletionDate != null) {
         Schema.setOcDeleted(episodeDocument, deletionDate);
+      }
 
       solrServer.add(episodeDocument);
       solrServer.add(seriesDocument);
       solrServer.commit();
       return true;
     } catch (Exception e) {
+      logger.error("Unable to add mediapackage {} to index", sourceMediaPackage.getIdentifier());
       try {
         solrServer.rollback();
       } catch (IOException e1) {
@@ -354,11 +417,8 @@ public class SolrIndexManager {
    * @param acl
    *          the access control list for this mediapackage
    * @return an input document ready to be posted to solr
-   * @throws MediaPackageException
-   *           if serialization of the media package fails
    */
-  private SolrInputDocument createEpisodeInputDocument(MediaPackage mediaPackage, AccessControlList acl)
-          throws MediaPackageException, IOException {
+  private SolrInputDocument createEpisodeInputDocument(MediaPackage mediaPackage, AccessControlList acl) {
 
     SolrInputDocument doc = new SolrInputDocument();
     String mediaPackageId = mediaPackage.getIdentifier().toString();
@@ -381,8 +441,9 @@ public class SolrIndexManager {
     // /
     // Add standard dublin core fields
     // naive approach. works as long as only setters, not adders are available in the schema
-    for (StaticMetadata md : getMetadata(mdServices, mediaPackage))
+    for (StaticMetadata md : getMetadata(mdServices, mediaPackage)) {
       addEpisodeMetadata(doc, md);
+    }
 
     // /
     // Add mpeg7
@@ -398,7 +459,7 @@ public class SolrIndexManager {
         Mpeg7Catalog mpeg7Catalog = loadMpeg7Catalog(mpeg7Catalogs[0]);
         addMpeg7Metadata(doc, mediaPackage, mpeg7Catalog);
       } catch (IOException e) {
-        logger.error("Error loading mpeg7 catalog. Skipping catalog: {}", e.getMessage());
+        logger.error("Error loading mpeg7 catalog. Skipping catalog", e);
       }
     } else {
       logger.debug("No segmentation catalog found");
@@ -595,37 +656,31 @@ public class SolrIndexManager {
 
       @Override
       public List<DField<String>> getOcAcl() {
-        return Collections.EMPTY_LIST; // set elsewhere
+        return Collections.emptyList(); // set elsewhere
       }
 
       @Override
       public List<DField<String>> getSegmentText() {
-        return Collections.EMPTY_LIST; // set elsewhere
+        return Collections.emptyList(); // set elsewhere
       }
 
       @Override
       public List<DField<String>> getSegmentHint() {
-        return Collections.EMPTY_LIST; // set elsewhere
+        return Collections.emptyList(); // set elsewhere
       }
     });
   }
 
   static List<DField<String>> fromMValue(List<MetadataValue<String>> as) {
-    return map(as, new ArrayList<DField<String>>(), new Function<MetadataValue<String>, DField<String>>() {
-      @Override
-      public DField<String> apply(MetadataValue<String> v) {
-        return new DField<String>(v.getValue(), v.getLanguage());
-      }
-    });
+    return as.stream()
+        .map(v -> new DField<>(v.getValue(), MetadataValues.LANGUAGE_UNDEFINED))
+        .collect(Collectors.toList());
   }
 
   static List<DField<String>> fromDCValue(List<DublinCoreValue> as) {
-    return map(as, new ArrayList<DField<String>>(), new Function<DublinCoreValue, DField<String>>() {
-      @Override
-      public DField<String> apply(DublinCoreValue v) {
-        return new DField<String>(v.getValue(), v.getLanguage());
-      }
-    });
+    return as.stream()
+        .map(v -> new DField<>(v.getValue(), DublinCore.LANGUAGE_UNDEFINED))
+        .collect(Collectors.toList());
   }
 
   /**
@@ -637,12 +692,12 @@ public class SolrIndexManager {
    *          the access control list
    */
   static void setAuthorization(SolrInputDocument doc, SecurityService securityService, AccessControlList acl) {
-    Map<String, List<String>> permissions = new HashMap<String, List<String>>();
+    Map<String, List<String>> permissions = new HashMap<>();
 
     // Define containers for common permissions
-    List<String> reads = new ArrayList<String>();
+    List<String> reads = new ArrayList<>();
     permissions.put(READ.toString(), reads);
-    List<String> writes = new ArrayList<String>();
+    List<String> writes = new ArrayList<>();
     permissions.put(WRITE.toString(), writes);
 
     String adminRole = securityService.getOrganization().getAdminRole();
@@ -663,15 +718,12 @@ public class SolrIndexManager {
        * MH-8353 a series could have a permission defined we don't know how to handle -DH
        */
       if (actionPermissions == null) {
-        logger.warn("Search service doesn't know how to handle action: " + entry.getAction());
+        logger.debug("Search service doesn't know how to handle action: {}", entry.getAction());
         continue;
       }
-      if (acl == null) {
-        actionPermissions = new ArrayList<String>();
-        permissions.put(entry.getAction(), actionPermissions);
+      if (adminRole != null && !entry.getRole().equals(adminRole)) {
+        actionPermissions.add(entry.getRole());
       }
-      actionPermissions.add(entry.getRole());
-
     }
 
     // Write the permissions to the solr document
@@ -708,16 +760,14 @@ public class SolrIndexManager {
   private SolrInputDocument createSeriesInputDocument(String seriesId, AccessControlList acl) throws IOException,
           UnauthorizedException {
 
-    if (seriesId == null)
+    if (seriesId == null) {
       return null;
+    }
     DublinCoreCatalog dc = null;
     try {
       dc = seriesService.getSeries(seriesId);
-    } catch (SeriesException e) {
-      logger.debug("No series dublincore found for series id " + seriesId);
-      return null;
-    } catch (NotFoundException e) {
-      logger.debug("No series dublincore found for series id " + seriesId);
+    } catch (SeriesException | NotFoundException e) {
+      logger.debug("No series dublincore found for series id {}", seriesId);
       return null;
     }
 
@@ -725,9 +775,7 @@ public class SolrIndexManager {
 
     // Populate document with existing data
     try {
-      StringBuffer query = new StringBuffer("q=");
-      query = query.append(Schema.ID).append(":").append(SolrUtils.clean(seriesId));
-      SolrParams params = SolrRequestParsers.parseQueryString(query.toString());
+      SolrParams params = SolrRequestParsers.parseQueryString("q=" + Schema.ID + ":" + SolrUtils.clean(seriesId));
       QueryResponse solrResponse = solrServer.query(params);
       if (solrResponse.getResults().size() > 0) {
         SolrDocument existingSolrDocument = solrResponse.getResults().get(0);
@@ -736,7 +784,7 @@ public class SolrIndexManager {
         }
       }
     } catch (Exception e) {
-      logger.error("Error trying to load series " + seriesId, e);
+      logger.error("Error trying to load series {}", seriesId, e);
     }
 
     // Fill document
@@ -965,12 +1013,13 @@ public class SolrIndexManager {
       sortedAnnotations = new TreeSet<TextAnnotation>(new Comparator<TextAnnotation>() {
         @Override
         public int compare(TextAnnotation a1, TextAnnotation a2) {
-          if ((RELEVANCE_BOOST * a1.getRelevance() + a1.getConfidence()) > (RELEVANCE_BOOST * a2.getRelevance() + a2
-                  .getConfidence()))
+          double v1 = RELEVANCE_BOOST * a1.getRelevance() + a1.getConfidence();
+          double v2 = RELEVANCE_BOOST * a2.getRelevance() + a2.getConfidence();
+          if (v1 > v2) {
             return -1;
-          else if ((RELEVANCE_BOOST * a1.getRelevance() + a1.getConfidence()) < (RELEVANCE_BOOST * a2.getRelevance() + a2
-                  .getConfidence()))
+          } else if (v1 < v2) {
             return 1;
+          }
           return 0;
         }
       });
@@ -987,8 +1036,9 @@ public class SolrIndexManager {
       for (Iterator<?> iterator = multimediaContent.elements(); iterator.hasNext();) {
 
         MultimediaContentType type = (MultimediaContentType) iterator.next();
-        if (!(type instanceof Video) && !(type instanceof AudioVisual))
+        if (!(type instanceof Video) && !(type instanceof AudioVisual)) {
           continue;
+        }
 
         // for every segment in the current multimedia content track
 
@@ -1004,8 +1054,9 @@ public class SolrIndexManager {
           SpatioTemporalDecomposition spt = segment.getSpatioTemporalDecomposition();
           if (spt != null) {
             for (VideoText videoText : spt.getVideoText()) {
-              if (segmentText.length() > 0)
+              if (segmentText.length() > 0) {
                 segmentText.append(" ");
+              }
               segmentText.append(videoText.getText().getText());
               // TODO: Add hint on bounding box
             }
@@ -1018,8 +1069,9 @@ public class SolrIndexManager {
             Iterator<?> kwIter = textAnnotation.keywordAnnotations();
             while (kwIter.hasNext()) {
               KeywordAnnotation keywordAnnotation = (KeywordAnnotation) kwIter.next();
-              if (segmentText.length() > 0)
+              if (segmentText.length() > 0) {
                 segmentText.append(" ");
+              }
               segmentText.append(keywordAnnotation.getKeyword());
             }
           }
@@ -1030,8 +1082,9 @@ public class SolrIndexManager {
             Iterator<FreeTextAnnotation> freeTextIter = freeIter.next().freeTextAnnotations();
             while (freeTextIter.hasNext()) {
               FreeTextAnnotation freeTextAnnotation = freeTextIter.next();
-              if (segmentText.length() > 0)
+              if (segmentText.length() > 0) {
                 segmentText.append(" ");
+              }
               segmentText.append(freeTextAnnotation.getText());
             }
           }
@@ -1062,8 +1115,8 @@ public class SolrIndexManager {
             }
           }
 
-          logger.trace("Adding segment: " + timepoint.toString());
-          Schema.setSegmentHint(doc, new DField<String>(hintField.toString(), Integer.toString(segmentCount)));
+          logger.trace("Adding segment: {}", timepoint);
+          Schema.setSegmentHint(doc, new DField<>(hintField.toString(), Integer.toString(segmentCount)));
 
           // increase segment counter
           segmentCount++;
@@ -1143,8 +1196,9 @@ public class SolrIndexManager {
       importance.remove(maxKeyword);
 
       // append keyword to string
-      if (buf.length() > 0)
+      if (buf.length() > 0) {
         buf.append(" ");
+      }
       buf.append(maxKeyword);
     }
 
@@ -1211,14 +1265,10 @@ public class SolrIndexManager {
    * Get metadata from all registered metadata services.
    */
   static List<StaticMetadata> getMetadata(final List<StaticMetadataService> mdServices, final MediaPackage mp) {
-    return flatMap(mdServices, new ArrayList<StaticMetadata>(),
-            new Function<StaticMetadataService, Collection<StaticMetadata>>() {
-              @Override
-              public Collection<StaticMetadata> apply(StaticMetadataService s) {
-                StaticMetadata md = s.getMetadata(mp);
-                return md != null ? Arrays.asList(md) : Collections.<StaticMetadata> emptyList();
-              }
-            });
+    return mdServices.stream()
+            .map(s -> s.getMetadata(mp))
+            .filter(Objects::nonNull)
+            .collect(Collectors.toList());
   }
 
   /**

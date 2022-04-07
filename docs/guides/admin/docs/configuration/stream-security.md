@@ -133,6 +133,7 @@ signed with a single key. Or it could be configured so that each different schem
 different keys protecting each host’s URLs separately etc. Having the timing configurations separate from the key
 configuration allows the different types of URLs to be signed differently depending on the needs of the users without
 needing to configure this timing for all of the different keys.
+<!-- _Very wordy.If this paragraph of examples is necessary, consider making it a list instead (and not full complete sentences) -->
 
 ### Signing for Opencast-internal access
 
@@ -220,15 +221,44 @@ Example:
     url.regex.archive=.*archive\/archive\/mediapackage\/.*\/.*\/.*
     url.regex.static=.*static.*
 
+Configuration of Wowza URL Signing
+----------------------------------
+
+To configure Wowza URL Signing, you should use the file configuration `org.opencastproject.security.urlsigning.provider.impl.WowzaUrlSigningProvider.cfg`.
+
+You can find three properties to configure:
+
+    # key.wowzatoken.secret=myTokenPrefix@mySharedSecret
+    # key.wowzatoken.url=http://localhost:8080
+    # key.wowzatoken.organization=mh_default_org
+
+Each property has the form: key.*keyId*.*propertyName*
+
+`key.wowzatoken.organization` is optional. By deafult is `*`, that means any organization.
+
+`key.wowzatoken.url` is mandatory. describes the url prefix that urls must have.
+
+`key.wowzatoken.secret=myTokenPrefix@mySharedSecret` is mandatory. It is a pair separated by `@`. First value, `myTokenPrefix`, means defines the prefix that all parameters of signed urls will have. Second value, `mySharedSecret`, defines a secret value, to secure urls.
+
+After configuring the Opencast server, the steps to configure enable stream security in Wowza are:
+
+1. Open your Wowza server webpage (Normally `http://<wowza-server>:8088/enginemanager`) , log in and enter to your desired VOD application
+2. In the menu, select `Playback-Security` and click in `edit`
+   1. Select `Protect all protocols using hash (SecureToken version 2)`
+   2. `Shared Secret` write the `mySharedSecret` set in the first step
+   3. `Hash-Algorithm`: SHA-256
+   4. `Hash Query Parameter Prefix` write the `myTokenPrefix` set in step one
+4. Save changes and restart the application
+
 Testing
 -------
 
 Once all components of Stream Security are installed and properly configured, it is important to verify that the system
 is working as expected. It is especially important to try to access resources that should *not* be accessible.
 
-There are ways to test in a structured way which will be explained below.
+The following explains how to test if Stream Security has been correctly configured.
 
-### Creating Signed URLs with Signing Endpoint
+### Step 1: Creating Signed URLs with Signing Endpoint
 
 The signing service provides a REST endpoint, which allows for the signing of arbitrary URLs. For manual use it is
 recommended to visit the endpoint’s documentation page at `http://localhost:8080/signing/docs`.
@@ -242,7 +272,7 @@ checked again to ensure that at least one signing provider is responsible for th
 If the service is fully operational, the response code will be *200 OK* and the response body either *true* (accepted)
 or *false* (refused).
 
-### Signing the URL
+### Step 2: Signing the URL
 
 On the same documentation page URLs can be signed using the `/signing/sign` endpoint, and the access policy may be
 specified in that form as well. With this, several scenarios can be tested. Examples are:
@@ -252,7 +282,7 @@ specified in that form as well. With this, several scenarios can be tested. Exam
 * URLs that are missing some or all of the signing parameters (policy, keyId or signature)
 * URLs that are attempting to use signing parameters (policy and signature) from a different signed URL
 
-### Verifying the URL
+### Step 3: Verifying the URL
 
 The signed URLs can then be passed to the appropriate testing tool (web browser, cURL, player, …) to test the
 functionality of the verification component(s). The following table is the return codes associated with different
@@ -271,7 +301,7 @@ rejection conditions:
 The components that verify a URL is signed will run before a request is checked to be valid, so if a non-existent URL is
 signed for example, the above conditions will need to be fixed before a missing (404) response code will be returned.
 
-### Inspect policy
+### Step 4: Inspect policy
 
 The generated policy which is added to the signed URLs can be inspected. It needs to be decoded from Base64 and the
 result must be a JSON document that contains exactly the values which have been passed during signing.
@@ -303,7 +333,7 @@ Inspecting and modifying the policy is useful for advanced testing, such as:
 
 ## Further information
 
-For an overview of Stream Security:
+For an overview of Stream Security: <!-- _This info is already given at the very beginning of the page! -->
 
 * [Stream Security Overview](../modules/stream-security.md)
 

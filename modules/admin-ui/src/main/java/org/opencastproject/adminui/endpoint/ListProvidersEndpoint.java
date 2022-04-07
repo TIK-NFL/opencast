@@ -25,16 +25,11 @@ import static org.opencastproject.adminui.endpoint.EndpointUtil.addRequestFilter
 import static org.opencastproject.adminui.endpoint.EndpointUtil.generateJSONObject;
 
 import org.opencastproject.adminui.exception.JsonCreationException;
-import org.opencastproject.index.service.exception.ListProviderException;
-import org.opencastproject.index.service.exception.ListProviderNotFoundException;
-import org.opencastproject.index.service.resources.list.api.ListProvidersService;
-import org.opencastproject.index.service.resources.list.api.ResourceListQuery;
 import org.opencastproject.index.service.resources.list.query.AclsListQuery;
 import org.opencastproject.index.service.resources.list.query.AgentsListQuery;
 import org.opencastproject.index.service.resources.list.query.EventListQuery;
 import org.opencastproject.index.service.resources.list.query.GroupsListQuery;
 import org.opencastproject.index.service.resources.list.query.JobsListQuery;
-import org.opencastproject.index.service.resources.list.query.ResourceListQueryImpl;
 import org.opencastproject.index.service.resources.list.query.SeriesListQuery;
 import org.opencastproject.index.service.resources.list.query.ServersListQuery;
 import org.opencastproject.index.service.resources.list.query.ServicesListQuery;
@@ -42,15 +37,23 @@ import org.opencastproject.index.service.resources.list.query.ThemesListQuery;
 import org.opencastproject.index.service.resources.list.query.UsersListQuery;
 import org.opencastproject.index.service.util.JSONUtils;
 import org.opencastproject.index.service.util.RestUtils;
+import org.opencastproject.list.api.ListProviderException;
+import org.opencastproject.list.api.ListProvidersService;
+import org.opencastproject.list.api.ResourceListQuery;
+import org.opencastproject.list.impl.ListProviderNotFoundException;
+import org.opencastproject.list.impl.ResourceListQueryImpl;
 import org.opencastproject.security.api.SecurityService;
 import org.opencastproject.util.doc.rest.RestParameter;
 import org.opencastproject.util.doc.rest.RestQuery;
 import org.opencastproject.util.doc.rest.RestResponse;
 import org.opencastproject.util.doc.rest.RestService;
 
+import org.apache.commons.lang3.StringUtils;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.osgi.framework.BundleContext;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,6 +78,15 @@ import javax.ws.rs.core.Response;
               + "<em>This service is for exclusive use by the module admin-ui. Its API might change "
               + "anytime without prior notice. Any dependencies other than the admin UI will be strictly ignored. "
               + "DO NOT use this for integration of third-party applications.<em>"})
+@Component(
+        immediate = true,
+        service = ListProvidersEndpoint.class,
+        property = {
+                "service.description=Admin UI - Resource List Provider Endpoint",
+                "opencast.service.type=org.opencastproject.adminui.ListProvidersEndpoint",
+                "opencast.service.path=/admin-ng/resources",
+        }
+)
 public class ListProvidersEndpoint {
 
   private static final Logger logger = LoggerFactory.getLogger(ListProvidersEndpoint.class);
@@ -88,21 +100,32 @@ public class ListProvidersEndpoint {
   private ListProvidersService listProvidersService;
   private SeriesEndpoint seriesEndpoint;
 
+  /** This regex is used to reduce the users in the filter selectbox.
+   * The filter is located in the top right corner in the admin ui. */
+  private static final String PROP_KEY_USER_FILTER_REGEX = "org.opencastproject.adminui.filter.user.regex";
+  private static final String PROP_KEY_USER_FILTER_REGEX_DEFAULT = ".*";
+
   protected void activate(BundleContext bundleContext) {
     logger.info("Activate list provider service");
+    JSONUtils.setUserRegex(StringUtils.defaultIfBlank(
+            bundleContext.getProperty(PROP_KEY_USER_FILTER_REGEX),
+            PROP_KEY_USER_FILTER_REGEX_DEFAULT));
   }
 
   /** OSGi callback for series services. */
+  @Reference
   public void setListProvidersService(ListProvidersService listProvidersService) {
     this.listProvidersService = listProvidersService;
   }
 
   /** OSGi callback for sercurity service. */
+  @Reference
   public void setSecurityService(SecurityService securitySerivce) {
     this.securityService = securitySerivce;
   }
 
   /** OSGi callback for series end point. */
+  @Reference
   public void setSeriesEndpoint(SeriesEndpoint seriesEndpoint) {
     this.seriesEndpoint = seriesEndpoint;
   }
@@ -113,7 +136,7 @@ public class ListProvidersEndpoint {
   @RestQuery(name = "list", description = "Provides key-value list from the given source", pathParameters = { @RestParameter(name = "source", description = "The source for the key-value list", isRequired = true, type = RestParameter.Type.STRING) }, restParameters = {
           @RestParameter(description = "The maximum number of items to return per page", isRequired = false, name = "limit", type = RestParameter.Type.INTEGER),
           @RestParameter(description = "The offset", isRequired = false, name = "offset", type = RestParameter.Type.INTEGER),
-          @RestParameter(description = "Filters", isRequired = false, name = "filter", type = RestParameter.Type.STRING) }, reponses = { @RestResponse(description = "Returns the key-value list for the given source.", responseCode = HttpServletResponse.SC_OK) }, returnDescription = "")
+          @RestParameter(description = "Filters", isRequired = false, name = "filter", type = RestParameter.Type.STRING) }, responses = { @RestResponse(description = "Returns the key-value list for the given source.", responseCode = HttpServletResponse.SC_OK) }, returnDescription = "")
   public Response getList(@PathParam("source") final String source, @QueryParam("limit") final int limit,
           @QueryParam("filter") final String filter, @QueryParam("offset") final int offset,
           @Context HttpHeaders headers) {
@@ -148,7 +171,7 @@ public class ListProvidersEndpoint {
   @Path("components.json")
   @Produces(MediaType.APPLICATION_JSON)
   @RestQuery(name = "components", description = "Provides a set of constants lists (right now only eventCommentReasons) for use in the admin UI",
-    reponses = { @RestResponse(description = "Returns a set of constants lists (right now only eventCommentReasons) for use in the admin UI",
+    responses = { @RestResponse(description = "Returns a set of constants lists (right now only eventCommentReasons) for use in the admin UI",
     responseCode = HttpServletResponse.SC_OK) }, returnDescription = "")
   public Response getComponents(@Context HttpHeaders headers) {
     String[] sources = { "eventCommentReasons" };
@@ -180,7 +203,7 @@ public class ListProvidersEndpoint {
   @GET
   @Path("providers.json")
   @Produces(MediaType.APPLICATION_JSON)
-  @RestQuery(name = "availableProviders", description = "Provides the list of the available list providers", reponses = { @RestResponse(description = "Returns the availables list providers.", responseCode = HttpServletResponse.SC_OK) }, returnDescription = "")
+  @RestQuery(name = "availableProviders", description = "Provides the list of the available list providers", responses = { @RestResponse(description = "Returns the availables list providers.", responseCode = HttpServletResponse.SC_OK) }, returnDescription = "")
   public Response getAvailablesProviders(@Context HttpHeaders headers) {
     JSONArray list = new JSONArray();
 
@@ -192,11 +215,11 @@ public class ListProvidersEndpoint {
   @GET
   @Path("{page}/filters.json")
   @Produces(MediaType.APPLICATION_JSON)
-  @RestQuery(name = "filters", description = "Provides filters for the given page", pathParameters = { @RestParameter(name = "page", description = "The page for which the filters are required", isRequired = true, type = RestParameter.Type.STRING) }, reponses = { @RestResponse(description = "Returns the filters for the given page.", responseCode = HttpServletResponse.SC_OK) }, returnDescription = "")
+  @RestQuery(name = "filters", description = "Provides filters for the given page", pathParameters = { @RestParameter(name = "page", description = "The page for which the filters are required", isRequired = true, type = RestParameter.Type.STRING) }, responses = { @RestResponse(description = "Returns the filters for the given page.", responseCode = HttpServletResponse.SC_OK) }, returnDescription = "")
   public Response getFilters(@PathParam("page") final String page, @Context HttpHeaders headers)
           throws ListProviderException {
 
-    ResourceListQuery query = new ResourceListQueryImpl();
+    ResourceListQuery query;
 
     if ("series".equals(page)) {
       query = new SeriesListQuery();
@@ -227,7 +250,7 @@ public class ListProvidersEndpoint {
       if ("events".equals(page) && seriesEndpoint.getOnlySeriesWithWriteAccessEventsFilter()) {
         Map<String, String> seriesWriteAccess = seriesEndpoint.getUserSeriesByAccess(true);
         return RestUtils.okJson(JSONUtils.filtersToJSONSeriesWriteAccess(query, listProvidersService,
-                securityService.getOrganization(), seriesWriteAccess));
+                seriesWriteAccess));
       } else {
         return RestUtils.okJson(JSONUtils.filtersToJSON(query, listProvidersService, securityService.getOrganization()));
       }

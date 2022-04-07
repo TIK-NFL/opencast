@@ -21,9 +21,8 @@
 
 package org.opencastproject.metadata.mpeg7;
 
-import org.opencastproject.mediapackage.Catalog;
-import org.opencastproject.mediapackage.MediaPackageElementFlavor;
 import org.opencastproject.metadata.api.CatalogService;
+import org.opencastproject.util.XmlSafeParser;
 
 import org.apache.commons.io.output.ByteArrayOutputStream;
 
@@ -32,7 +31,6 @@ import java.io.IOException;
 import java.io.InputStream;
 
 import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
@@ -41,28 +39,9 @@ import javax.xml.transform.stream.StreamResult;
  */
 public class Mpeg7CatalogService implements CatalogService<Mpeg7Catalog> {
 
-  /**
-   * {@inheritDoc}
-   *
-   * @see org.opencastproject.metadata.api.CatalogService#accepts(org.opencastproject.mediapackage.Catalog)
-   */
-  @Override
-  public boolean accepts(Catalog catalog) {
-    if (catalog == null)
-      throw new IllegalArgumentException("Catalog must not be null");
-    MediaPackageElementFlavor flavor = catalog.getFlavor();
-    return flavor != null && (flavor.equals(Mpeg7Catalog.ANY_MPEG7));
-  }
-
-  /**
-   * {@inheritDoc}
-   *
-   * @see org.opencastproject.metadata.api.CatalogService#serialize(org.opencastproject.metadata.api.MetadataCatalog)
-   */
-  @Override
   public InputStream serialize(Mpeg7Catalog catalog) throws IOException {
     try {
-      Transformer tf = TransformerFactory.newInstance().newTransformer();
+      Transformer tf = XmlSafeParser.newTransformerFactory().newTransformer();
       DOMSource xmlSource = new DOMSource(catalog.toXml());
       ByteArrayOutputStream out = new ByteArrayOutputStream();
       tf.transform(xmlSource, new StreamResult(out));
@@ -72,24 +51,12 @@ public class Mpeg7CatalogService implements CatalogService<Mpeg7Catalog> {
     }
   }
 
-  /**
-   * {@inheritDoc}
-   *
-   * @see org.opencastproject.metadata.api.CatalogService#load(java.io.InputStream)
-   */
-  @Override
   public Mpeg7Catalog load(InputStream in) throws IOException {
     if (in == null)
       throw new IllegalArgumentException("Stream must not be null");
     return new Mpeg7CatalogImpl(in);
   }
 
-  /**
-   * {@inheritDoc}
-   *
-   * @see org.opencastproject.metadata.api.CatalogService#newInstance()
-   */
-  @Override
   public Mpeg7Catalog newInstance() {
     return new Mpeg7CatalogImpl();
   }

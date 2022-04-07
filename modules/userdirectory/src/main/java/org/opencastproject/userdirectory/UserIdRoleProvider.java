@@ -38,6 +38,8 @@ import com.google.common.base.CharMatcher;
 import org.apache.commons.lang3.BooleanUtils;
 import org.osgi.service.cm.ConfigurationException;
 import org.osgi.service.cm.ManagedService;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,6 +54,13 @@ import java.util.regex.Pattern;
 /**
  * The user id role provider assigns the user id role.
  */
+@Component(
+    property = {
+        "service.description=Provides the user id role"
+    },
+    immediate = true,
+    service = { RoleProvider.class, UserIdRoleProvider.class, ManagedService.class }
+)
 public class UserIdRoleProvider implements RoleProvider, ManagedService {
 
 
@@ -82,6 +91,7 @@ public class UserIdRoleProvider implements RoleProvider, ManagedService {
    * @param securityService
    *          the securityService to set
    */
+  @Reference(name = "security-service")
   public void setSecurityService(SecurityService securityService) {
     this.securityService = securityService;
   }
@@ -92,18 +102,16 @@ public class UserIdRoleProvider implements RoleProvider, ManagedService {
    * @param userDirectoryService
    *          the userDirectoryService to set
    */
+  @Reference(name = "userDirectoryService")
   public void setUserDirectoryService(UserDirectoryService userDirectoryService) {
     this.userDirectoryService = userDirectoryService;
   }
 
-  public static final String getUserIdRole(String userName) {
-    String safeUserName;
+  public static String getUserIdRole(String userName) {
     if (sanitize) {
-      safeUserName = SAFE_USERNAME.replaceFrom(userName, "_").toUpperCase();
-    } else {
-      safeUserName = userName;
+      userName = SAFE_USERNAME.replaceFrom(userName, "_").toUpperCase();
     }
-    return userRolePrefix.concat(safeUserName);
+    return userRolePrefix.concat(userName);
   }
 
   /**
@@ -113,8 +121,18 @@ public class UserIdRoleProvider implements RoleProvider, ManagedService {
   public List<Role> getRolesForUser(String userName) {
     Organization organization = securityService.getOrganization();
     List<Role> roles = new ArrayList<Role>();
-    roles.add(new JaxbRole(getUserIdRole(userName), JaxbOrganization.fromOrganization(organization), "The user id role", Role.Type.SYSTEM));
-    roles.add(new JaxbRole(ROLE_USER, JaxbOrganization.fromOrganization(organization), "The authenticated user role", Role.Type.SYSTEM));
+    roles.add(new JaxbRole(
+        getUserIdRole(userName),
+        JaxbOrganization.fromOrganization(organization),
+        "The user id role",
+        Role.Type.SYSTEM
+    ));
+    roles.add(new JaxbRole(
+        ROLE_USER,
+        JaxbOrganization.fromOrganization(organization),
+        "The authenticated user role",
+        Role.Type.SYSTEM
+    ));
     return Collections.unmodifiableList(roles);
   }
 
@@ -131,8 +149,9 @@ public class UserIdRoleProvider implements RoleProvider, ManagedService {
    */
   @Override
   public Iterator<Role> findRoles(String query, Role.Target target, int offset, int limit) {
-    if (query == null)
+    if (query == null) {
       throw new IllegalArgumentException("Query must be set");
+    }
 
     // These roles are not meaningful for users/groups
     if (target == Role.Target.USER) {
@@ -146,7 +165,12 @@ public class UserIdRoleProvider implements RoleProvider, ManagedService {
 
     // Return authenticated user role if it matches the query pattern
     if (like(ROLE_USER, query)) {
-      foundRoles.add(new JaxbRole(ROLE_USER, JaxbOrganization.fromOrganization(organization), "The authenticated user role", Role.Type.SYSTEM));
+      foundRoles.add(new JaxbRole(
+          ROLE_USER,
+          JaxbOrganization.fromOrganization(organization),
+          "The authenticated user role",
+          Role.Type.SYSTEM
+      ));
     }
 
     // Include user id roles only if wildcard search or query matches user id role prefix
@@ -165,7 +189,12 @@ public class UserIdRoleProvider implements RoleProvider, ManagedService {
       User u = users.next();
       // We exclude the digest user, but then add the global ROLE_USER above
       if (!"system".equals(u.getProvider())) {
-        foundRoles.add(new JaxbRole(getUserIdRole(u.getUsername()), JaxbOrganization.fromOrganization(u.getOrganization()), "User id role", Role.Type.SYSTEM));
+        foundRoles.add(new JaxbRole(
+            getUserIdRole(u.getUsername()),
+            JaxbOrganization.fromOrganization(u.getOrganization()),
+            "User id role",
+            Role.Type.SYSTEM
+        ));
       }
     }
 

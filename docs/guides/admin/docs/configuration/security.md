@@ -16,9 +16,9 @@ with the basic concepts and vocabulary described in the Spring Security document
 
 ## Configure Access
 
-To configure access roles and URL patterns for a tenant, modify `/etc/security/{{tenant_identifier.xml}}`.  If you are
-not hosting multiple tenants on your Opencast server or cluster, all configuration should be done in
-`mh_default_org.xml`.
+To configure access roles and URL patterns for a tenant, modify `etc/security/<tenant_identifier.xml>`.
+If you are not hosting multiple tenants on your Opencast server or cluster,
+all configuration should be done in `mh_default_org.xml`.
 
 Some examples:
 
@@ -51,6 +51,7 @@ Four user providers are available by default:
 * [Sakai User Provider](security.user.sakai.md)
 * [Moodle User Provider](security.user.moodle.md)
 * [Brightspace D2L User Provider](security.user.brightspace.md)
+* [Canvas LMS User Provider](security.user.canvas.md)
 
 The set of user and role providers can be configured. If you do not want to keep users and passwords in Opencast's
 database, you can replace the JpaUserAndRoleProvider with the LdapUserProvider by replacing the
@@ -61,3 +62,4 @@ userdirectory-jpa jar with the userdirectory-ldap jar.
 * [Configure Central Authentication Service (CAS)](security.cas.md)
 * [Configure LDAP Authentication and Authorization](security.ldap.md)
 * [Configure Authentication and Authorization Infrastructure (AAI)](security.aai.md)
+* [Configure JWT-based Authentication and Authorization (e.g. for OIDC)](security.jwt.md)

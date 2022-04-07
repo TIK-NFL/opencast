@@ -26,14 +26,13 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.hasSize;
 import static org.junit.Assert.assertThat;
-import static org.opencastproject.test.rest.RestServiceTestEnv.localhostRandomPort;
 import static org.opencastproject.test.rest.RestServiceTestEnv.testEnvForClasses;
 
 import org.opencastproject.adminui.impl.AdminUIConfiguration;
-import org.opencastproject.adminui.index.AdminUISearchIndex;
 import org.opencastproject.assetmanager.api.AssetManager;
 import org.opencastproject.authorization.xacml.manager.api.AclService;
 import org.opencastproject.capture.admin.api.CaptureAgentStateService;
+import org.opencastproject.elasticsearch.index.ElasticsearchIndex;
 import org.opencastproject.event.comment.EventCommentService;
 import org.opencastproject.index.service.api.IndexService;
 import org.opencastproject.index.service.util.RestUtils;
@@ -59,7 +58,6 @@ import org.json.simple.parser.ParseException;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -71,7 +69,8 @@ import io.restassured.http.ContentType;
 import uk.co.datumedge.hamcrest.json.SameJSONAs;
 
 public class AbstractEventEndpointTest {
-  private static final RestServiceTestEnv rt = testEnvForClasses(localhostRandomPort(), TestEventEndpoint.class,
+  private static final RestServiceTestEnv rt = testEnvForClasses(
+          TestEventEndpoint.class,
           NotFoundExceptionMapper.class);
 
   public static TestEnv testEnv() {
@@ -135,7 +134,7 @@ public class AbstractEventEndpointTest {
   public void testUpdateEventComment() throws Exception {
     String eventString = IOUtils.toString(getClass().getResource("/eventComment.json"));
 
-    String result = given().pathParam("eventId", "asdasd").pathParam("commentId", 33).expect()
+    String result = given().pathParam("eventId", "asdasd").pathParam("commentId", 33).contentType(ContentType.URLENC).expect()
             .statusCode(HttpStatus.SC_OK).when().put(rt.host("{eventId}/comment/{commentId}")).asString();
 
     assertThat(eventString, SameJSONAs.sameJSONAs(result));
@@ -194,7 +193,7 @@ public class AbstractEventEndpointTest {
 
   @Test
   public void testUpdateEventCommentReply() throws Exception {
-    given().pathParam("eventId", "asdasd").pathParam("commentId", 33).pathParam("replyId", 78).expect()
+    given().pathParam("eventId", "asdasd").pathParam("commentId", 33).pathParam("replyId", 78).contentType(ContentType.URLENC).expect()
             .statusCode(HttpStatus.SC_BAD_REQUEST).when().put(rt.host("{eventId}/comment/{commentId}/{replyId}"));
 
     given().pathParam("eventId", "asdasd").pathParam("commentId", 33).pathParam("replyId", 77).formParam("text", "Text")
@@ -241,6 +240,22 @@ public class AbstractEventEndpointTest {
   }
 
   @Test
+  public void testGetEventsMetadata() throws Exception {
+    given().formParam("eventIds", "").expect().statusCode(HttpStatus.SC_BAD_REQUEST).when()
+      .post(rt.host("events/metadata.json"));
+
+    given().formParam("eventIds", "[\"notExists\", \"notExists2\"]").expect().statusCode(HttpStatus.SC_NOT_FOUND).when()
+      .post(rt.host("events/metadata.json"));
+
+    String eventMetadataString = IOUtils.toString(getClass().getResource("/eventsMetadata.json"));
+    String result = given().formParam("eventIds", "[\"notExists\", \"exists\", \"exists2\"]").expect().statusCode(HttpStatus.SC_OK)
+      .when().post(rt.host("events/metadata.json")).asString();
+
+    assertThat(eventMetadataString, SameJSONAs.sameJSONAs(result));
+  }
+
+
+  @Test
   public void testUpdateEventMetadata() throws Exception {
     String metadataJson = IOUtils.toString(getClass().getResource("/eventMetadata.json"));
 
@@ -249,6 +264,22 @@ public class AbstractEventEndpointTest {
 
     given().pathParam("eventId", "asdasd").formParam("metadata", metadataJson).expect().statusCode(HttpStatus.SC_OK)
             .when().put(rt.host("{eventId}/metadata"));
+  }
+
+  @Test
+  public void testUpdateEventsMetadata() throws Exception {
+
+    String metadataJson = IOUtils.toString(getClass().getResource("/eventMetadata.json"));
+
+    given().formParam("eventIds", "[\"exists\", \"exists2\"]").formParam("metadata", metadataJson).expect()
+      .statusCode(HttpStatus.SC_NO_CONTENT).when().put(rt.host("events/metadata"));
+
+    String updateErrors = IOUtils.toString(getClass().getResource("/eventsMetadataUpdateErrors.json"));
+    String result = given().formParam("eventIds", "[\"notExists\", \"exists\", \"updateFailure\"]").
+      formParam("metadata", "metadata").expect().statusCode(HttpStatus.SC_INTERNAL_SERVER_ERROR).when()
+      .put(rt.host("events/metadata")).asString();
+
+    assertThat(updateErrors, SameJSONAs.sameJSONAs(result));
   }
 
   @Test
@@ -476,26 +507,6 @@ public class AbstractEventEndpointTest {
   }
 
   @Test
-  @Ignore
-  public void testGetEventError() throws Exception {
-    String eventMetadataString = IOUtils.toString(getClass().getResource("/eventError.json"));
-
-    given().pathParam("eventId", "asdasd").pathParam("workflowId", "asd").pathParam("errorId", "asd").expect()
-            .statusCode(HttpStatus.SC_BAD_REQUEST).when()
-            .get(rt.host("{eventId}/workflows/{workflowId}/errors/{errorId}.json"));
-
-    given().pathParam("eventId", "asdasd").pathParam("workflowId", 3).pathParam("errorId", "asd").expect()
-            .statusCode(HttpStatus.SC_BAD_REQUEST).when()
-            .get(rt.host("{eventId}/workflows/{workflowId}/errors/{errorId}.json"));
-
-    String result = given().pathParam("eventId", "asdasd").pathParam("workflowId", 3).pathParam("errorId", 1).expect()
-            .statusCode(HttpStatus.SC_OK).when().get(rt.host("{eventId}/workflows/{workflowId}/errors/{errorId}.json"))
-            .asString();
-
-    assertThat(eventMetadataString, SameJSONAs.sameJSONAs(result));
-  }
-
-  @Test
   public void testGetEventAccessInformation() throws Exception {
     String eventAccessJson = IOUtils.toString(getClass().getResource("/eventAccess.json"));
 
@@ -520,16 +531,6 @@ public class AbstractEventEndpointTest {
     JSONObject accessJson = (JSONObject) new JSONParser().parse(accessJsonString);
     JSONObject episodeAccess = (JSONObject) accessJson.get("episode_access");
     return (String) episodeAccess.get("acl");
-  }
-
-  @Test
-  @Ignore
-  public void testGetNewMetadata() throws Exception {
-    String eventMetadataString = IOUtils.toString(getClass().getResource("/newEventMetadata.json"));
-
-    String result = given().expect().statusCode(HttpStatus.SC_OK).when().get(rt.host("new/metadata")).asString();
-
-    assertThat(eventMetadataString, SameJSONAs.sameJSONAs(result));
   }
 
   @Test
@@ -586,18 +587,6 @@ public class AbstractEventEndpointTest {
 
     assertThat(expected, SameJSONAs.sameJSONAs(result));
 
-  }
-
-  @Test
-  @Ignore
-  public void testCreateNewTask() throws Exception {
-    given().expect().statusCode(HttpStatus.SC_BAD_REQUEST).when().post(rt.host("task"));
-    given().formParam("metadata", "asdt").expect().statusCode(HttpStatus.SC_BAD_REQUEST).when().post(rt.host("task"));
-
-    String metadataString = IOUtils.toString(getClass().getResource("/createTasksRequest.json"));
-
-    given().formParam("metadata", metadataString).expect().statusCode(HttpStatus.SC_CREATED).when()
-            .post(rt.host("task"));
   }
 
   @Test
@@ -699,7 +688,7 @@ public class AbstractEventEndpointTest {
     private WorkflowService workflowService;
     private AssetManager assetManager;
     private JobEndpoint jobService;
-    private SeriesEndpoint seriesService;
+    private SeriesEndpoint seriesEndpoint;
     private AclService aclService;
     private EventCommentService eventCommentService;
     private SecurityService securityService;
@@ -707,7 +696,7 @@ public class AbstractEventEndpointTest {
     private AuthorizationService authorizationService;
     private SchedulerService schedulerService;
     private CaptureAgentStateService captureAgentStateService;
-    private AdminUISearchIndex index;
+    private ElasticsearchIndex index;
     private UrlSigningService urlSigningService;
 
     public WorkflowService getWorkflowService() {
@@ -722,12 +711,12 @@ public class AbstractEventEndpointTest {
       return jobService;
     }
 
-    public void setSeriesService(SeriesEndpoint seriesService) {
-      this.seriesService = seriesService;
+    public void setSeriesEndpoint(SeriesEndpoint seriesEndpoint) {
+      this.seriesEndpoint = seriesEndpoint;
     }
 
-    public SeriesEndpoint getSeriesService() {
-      return seriesService;
+    public SeriesEndpoint getSeriesEndpoint() {
+      return this.seriesEndpoint;
     }
 
     public void setWorkflowService(WorkflowService workflowService) {
@@ -798,11 +787,11 @@ public class AbstractEventEndpointTest {
       this.captureAgentStateService = captureAgentStateService;
     }
 
-    public void setIndex(AdminUISearchIndex index) {
+    public void setIndex(ElasticsearchIndex index) {
       this.index = index;
     }
 
-    public AdminUISearchIndex getIndex() {
+    public ElasticsearchIndex getIndex() {
       return index;
     }
 

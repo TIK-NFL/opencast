@@ -32,6 +32,7 @@ import static org.opencastproject.util.EqualsUtil.hash;
 import org.opencastproject.util.RequireUtil;
 import org.opencastproject.util.XmlNamespaceBinding;
 import org.opencastproject.util.XmlNamespaceContext;
+import org.opencastproject.util.XmlSafeParser;
 
 import com.entwinemedia.fn.Fn;
 import com.entwinemedia.fn.Fns;
@@ -42,6 +43,10 @@ import org.apache.commons.lang3.StringUtils;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
+import org.w3c.dom.bootstrap.DOMImplementationRegistry;
+import org.w3c.dom.ls.DOMImplementationLS;
+import org.w3c.dom.ls.LSOutput;
+import org.w3c.dom.ls.LSSerializer;
 import org.xml.sax.Attributes;
 
 import java.io.ByteArrayOutputStream;
@@ -61,12 +66,7 @@ import java.util.Map.Entry;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
 
 /**
  * This is a basic implementation for handling simple catalogs of metadata. It provides utility methods to store
@@ -83,7 +83,7 @@ import javax.xml.transform.stream.StreamResult;
  * <li>xsi - http://www.w3.org/2001/XMLSchema-instance
  * </ul>
  * <p>
- * <h3>Limitations</h3>
+ * <h2>Limitations</h2>
  * XMLCatalog supports only <em>one</em> prefix binding per namespace name, so you cannot create documents like the
  * following using XMLCatalog:
  *
@@ -457,34 +457,10 @@ public abstract class XMLCatalogImpl extends CatalogImpl implements XMLCatalog {
    *           If the xml parser environment is not correctly configured
    */
   protected Document newDocument() throws ParserConfigurationException {
-    DocumentBuilderFactory docBuilderFactory = DocumentBuilderFactory.newInstance();
+    DocumentBuilderFactory docBuilderFactory = XmlSafeParser.newDocumentBuilderFactory();
     docBuilderFactory.setNamespaceAware(true);
     DocumentBuilder docBuilder = docBuilderFactory.newDocumentBuilder();
     return docBuilder.newDocument();
-  }
-
-  /**
-   * Serializes the given xml document to the associated file. Please note that this method does <em>not</em> close the
-   * output stream. Anyone using this method is responsible for doing it by itself.
-   *
-   * @param document
-   *          the document
-   * @param docType
-   *          the document type definition (dtd)
-   * @throws TransformerException
-   *           if serialization fails
-   */
-  protected void saveToXml(Node document, String docType, OutputStream out) throws TransformerException, IOException {
-    StreamResult streamResult = new StreamResult(out);
-    TransformerFactory tf = TransformerFactory.newInstance();
-    Transformer serializer = tf.newTransformer();
-    serializer.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
-    if (docType != null)
-      serializer.setOutputProperty(OutputKeys.DOCTYPE_SYSTEM, docType);
-    serializer.setOutputProperty(OutputKeys.INDENT, "yes");
-    serializer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "4");
-    serializer.transform(new DOMSource(document), streamResult);
-    out.flush();
   }
 
   /**
@@ -834,14 +810,19 @@ public abstract class XMLCatalogImpl extends CatalogImpl implements XMLCatalog {
   public void toXml(OutputStream out, boolean format) throws IOException {
     try {
       Document doc = this.toXml();
-      DOMSource domSource = new DOMSource(doc);
-      StreamResult result = new StreamResult(out);
-      Transformer transformer = TransformerFactory.newInstance().newTransformer();
-      transformer.transform(domSource, result);
+      DOMImplementationRegistry reg = DOMImplementationRegistry.newInstance();
+      DOMImplementationLS impl = (DOMImplementationLS) reg.getDOMImplementation("LS");
+      LSSerializer serializer = impl.createLSSerializer();
+      serializer.getDomConfig().setParameter("format-pretty-print", format);
+      LSOutput output = impl.createLSOutput();
+      output.setByteStream(out);
+      serializer.write(doc, output);
     } catch (ParserConfigurationException e) {
       throw new IOException("unable to parse document");
     } catch (TransformerException e) {
       throw new IOException("unable to transform dom to a stream");
+    } catch (ClassNotFoundException | IllegalAccessException | InstantiationException e) {
+      throw new IOException("unable to serialize DOM");
     }
   }
 

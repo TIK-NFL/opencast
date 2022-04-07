@@ -27,22 +27,21 @@ import static com.entwinemedia.fn.data.json.Jsons.obj;
 import static com.entwinemedia.fn.data.json.Jsons.v;
 import static org.apache.commons.lang3.StringUtils.defaultString;
 import static org.apache.commons.lang3.exception.ExceptionUtils.getMessage;
-import static org.apache.commons.lang3.exception.ExceptionUtils.getStackTrace;
-import static org.opencastproject.matterhorn.search.SearchQuery.Order.Descending;
 import static org.opencastproject.util.doc.rest.RestParameter.Type.BOOLEAN;
 import static org.opencastproject.util.doc.rest.RestParameter.Type.INTEGER;
 import static org.opencastproject.util.doc.rest.RestParameter.Type.STRING;
+import static org.opencastproject.util.requests.SortCriterion.Order.Descending;
 
 import org.opencastproject.external.common.ApiMediaType;
 import org.opencastproject.external.common.ApiResponses;
 import org.opencastproject.index.service.util.RestUtils;
-import org.opencastproject.matterhorn.search.SortCriterion;
 import org.opencastproject.util.NotFoundException;
 import org.opencastproject.util.RestUtil;
 import org.opencastproject.util.doc.rest.RestParameter;
 import org.opencastproject.util.doc.rest.RestQuery;
 import org.opencastproject.util.doc.rest.RestResponse;
 import org.opencastproject.util.doc.rest.RestService;
+import org.opencastproject.util.requests.SortCriterion;
 import org.opencastproject.workflow.api.RetryStrategy;
 import org.opencastproject.workflow.api.WorkflowDatabaseException;
 import org.opencastproject.workflow.api.WorkflowDefinition;
@@ -77,8 +76,11 @@ import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.Response;
 
 @Path("/")
-@Produces({ ApiMediaType.JSON, ApiMediaType.VERSION_1_1_0, ApiMediaType.VERSION_1_2_0, ApiMediaType.VERSION_1_3_0 })
-@RestService(name = "externalapiworkflowdefinitions", title = "External API Workflow Definitions Service", notes = {}, abstractText = "Provides resources and operations related to the workflow definitions")
+@Produces({ ApiMediaType.JSON, ApiMediaType.VERSION_1_1_0, ApiMediaType.VERSION_1_2_0, ApiMediaType.VERSION_1_3_0,
+            ApiMediaType.VERSION_1_4_0, ApiMediaType.VERSION_1_5_0, ApiMediaType.VERSION_1_6_0,
+            ApiMediaType.VERSION_1_7_0 })
+@RestService(name = "externalapiworkflowdefinitions", title = "External API Workflow Definitions Service", notes = {},
+             abstractText = "Provides resources and operations related to the workflow definitions")
 public class WorkflowDefinitionsEndpoint {
 
   /**
@@ -120,7 +122,7 @@ public class WorkflowDefinitionsEndpoint {
           @RestParameter(name = "filter", description = "A comma seperated list of filters to limit the results with. A filter is the filter's name followed by a colon \":\" and then the value to filter with so it is the form <Filter Name>:<Value to Filter With>.", isRequired = false, type = STRING),
           @RestParameter(name = "sort", description = "Sort the results based upon a list of comma seperated sorting criteria. In the comma seperated list each type of sorting is specified as a pair such as: <Sort Name>:ASC or <Sort Name>:DESC. Adding the suffix ASC or DESC sets the order as ascending or descending order and is mandatory.", isRequired = false, type = STRING),
           @RestParameter(name = "limit", description = "The maximum number of results to return for a single request.", isRequired = false, type = INTEGER),
-          @RestParameter(name = "offset", description = "The index of the first result to return.", isRequired = false, type = INTEGER) }, reponses = {
+          @RestParameter(name = "offset", description = "The index of the first result to return.", isRequired = false, type = INTEGER) }, responses = {
           @RestResponse(description = "A (potentially empty) list of workflow definitions is returned.", responseCode = HttpServletResponse.SC_OK),
           @RestResponse(description = "The request is invalid or inconsistent.", responseCode = HttpServletResponse.SC_BAD_REQUEST) })
   public Response getWorkflowDefinitions(@HeaderParam("Accept") String acceptHeader,
@@ -131,7 +133,7 @@ public class WorkflowDefinitionsEndpoint {
     try {
       workflowDefinitions = workflowService.listAvailableWorkflowDefinitions().stream();
     } catch (WorkflowDatabaseException e) {
-      logger.error("The workflow service was not able to get the workflow definitions: {}", getStackTrace(e));
+      logger.error("The workflow service was not able to get the workflow definitions:", e);
       return ApiResponses.serverError("Could not retrieve workflow definitions, reason: '%s'", getMessage(e));
     }
 
@@ -214,7 +216,7 @@ public class WorkflowDefinitionsEndpoint {
   @RestQuery(name = "getworkflowdefinition", description = "Returns a single workflow definition.", returnDescription = "", pathParameters = {
           @RestParameter(name = "workflowDefinitionId", description = "The workflow definition id", isRequired = true, type = STRING) }, restParameters = {
           @RestParameter(name = "withoperations", description = "Whether the workflow operations should be included in the response", isRequired = false, type = BOOLEAN),
-          @RestParameter(name = "withconfigurationpanel", description = "Whether the workflow configuration panel should be included in the response", isRequired = false, type = BOOLEAN) }, reponses = {
+          @RestParameter(name = "withconfigurationpanel", description = "Whether the workflow configuration panel should be included in the response", isRequired = false, type = BOOLEAN) }, responses = {
           @RestResponse(description = "The workflow definition is returned.", responseCode = HttpServletResponse.SC_OK),
           @RestResponse(description = "The specified workflow definition does not exist.", responseCode = HttpServletResponse.SC_NOT_FOUND) })
   public Response getWorkflowDefinition(@HeaderParam("Accept") String acceptHeader,

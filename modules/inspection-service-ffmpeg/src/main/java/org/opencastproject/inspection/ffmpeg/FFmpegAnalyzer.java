@@ -310,6 +310,11 @@ public class FFmpegAnalyzer implements MediaAnalyzer {
             obj = stream.get("nb_frames");
             if (obj != null) {
               vMetadata.setFrames(Long.parseLong((String) obj));
+            } else if (vMetadata.getDuration() != null && vMetadata.getFrameRate() != null) {
+              long framesEstimation = Double.valueOf(vMetadata.getDuration() / 1000.0 * vMetadata.getFrameRate()).longValue();
+              if (framesEstimation >= 1) {
+                vMetadata.setFrames(framesEstimation);
+              }
             }
           }
 
@@ -344,10 +349,18 @@ public class FFmpegAnalyzer implements MediaAnalyzer {
   private float parseFloat(String val) {
     if (val.contains("/")) {
       String[] v = val.split("/");
-      return Float.parseFloat(v[0]) / Float.parseFloat(v[1]);
+      if (Float.parseFloat(v[1]) == 0) {
+        return 0;
+      } else {
+        return Float.parseFloat(v[0]) / Float.parseFloat(v[1]);
+      }
     } else if (val.contains(":")) {
       String[] v = val.split(":");
-      return Float.parseFloat(v[0]) / Float.parseFloat(v[1]);
+      if (Float.parseFloat(v[1]) == 0) {
+        return 0;
+      } else {
+        return Float.parseFloat(v[0]) / Float.parseFloat(v[1]);
+      }
     } else {
       return Float.parseFloat(val);
     }

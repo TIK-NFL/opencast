@@ -41,19 +41,32 @@ import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.osgi.framework.BundleContext;
 import org.osgi.service.component.ComponentContext;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 /**
  * User and group loader to create a system administrator group for each tenant along with a user named after the
  * organization.
  */
+@Component(
+    property = {
+        "service.description=System admin user and group loader"
+    },
+    immediate = true,
+    service = { AdminUserAndGroupLoader.class }
+)
 public class AdminUserAndGroupLoader implements OrganizationDirectoryListener {
 
   /** The logging facility */
@@ -116,6 +129,7 @@ public class AdminUserAndGroupLoader implements OrganizationDirectoryListener {
    * @param cc
    *          the component context
    */
+  @Activate
   public void activate(ComponentContext cc) throws Exception {
     logger.debug("Activating admin group loader");
     BundleContext bundleCtx = cc.getBundleContext();
@@ -125,7 +139,7 @@ public class AdminUserAndGroupLoader implements OrganizationDirectoryListener {
     adminRoles = StringUtils.trimToNull(bundleCtx.getProperty(OPT_ADMIN_ROLES));
 
     if (DEFAULT_ADMIN_PASSWORD_CONFIGURATION.equals(adminPassword)) {
-    logger.warn("\n"
+      logger.warn("\n"
             + "######################################################\n"
             + "#                                                    #\n"
             + "# WARNING: Opencast still uses the default admin     #\n"
@@ -154,8 +168,9 @@ public class AdminUserAndGroupLoader implements OrganizationDirectoryListener {
    *          the organization
    */
   private JpaOrganization fromOrganization(Organization org) {
-    if (org instanceof JpaOrganization)
+    if (org instanceof JpaOrganization) {
       return (JpaOrganization) org;
+    }
     return new JpaOrganization(org.getId(), org.getName(), org.getServers(), org.getAdminRole(), org.getAnonymousRole(),
             org.getProperties());
   }
@@ -183,20 +198,14 @@ public class AdminUserAndGroupLoader implements OrganizationDirectoryListener {
 
         // Make sure the administrator exists for this organization. Note that the user will gain its roles through
         // membership in the administrator group
-        JpaUser adminUser = (JpaUser) userAndRoleProvider.loadUser(adminUserName);
-        boolean userExists = adminUser != null;
+        boolean userExists = userAndRoleProvider.loadUser(adminUserName) != null;
         // Add roles according to the system configuration
-        Set<JpaRole> adminRolesSet = new HashSet<JpaRole>();
-        if (adminRoles != null) {
-          for (String r : StringUtils.split(adminRoles, ',')) {
-            String roleId = StringUtils.trimToNull(r);
-            if (roleId != null) {
-              adminRolesSet.add(new JpaRole(roleId, org));
-            }
-          }
-        }
-        String adminUserFullName = organization.getName().concat(" Administrator");
-        adminUser = new JpaUser(adminUserName, adminPassword, org, adminUserFullName, adminEmail, PROVIDER_NAME,
+        Set<JpaRole> adminRolesSet = Arrays.stream(StringUtils.split(Objects.toString(adminRoles, ""), ','))
+            .map(StringUtils::trimToNull)
+            .filter(Objects::nonNull)
+            .map(r -> new JpaRole(r, org))
+            .collect(Collectors.toSet());
+        JpaUser adminUser = new JpaUser(adminUserName, adminPassword, org, "Administrator", adminEmail, PROVIDER_NAME,
                                 false, adminRolesSet);
         if (userExists) {
           userAndRoleProvider.updateUser(adminUser);
@@ -209,8 +218,8 @@ public class AdminUserAndGroupLoader implements OrganizationDirectoryListener {
         // System administrator group
         String adminGroupId = org.getId().toUpperCase().concat(SYSTEM_ADMIN_GROUP_SUFFIX);
         JpaGroup systemAdminGroup = (JpaGroup) groupRoleProvider.loadGroup(adminGroupId, org.getId());
-        Set<JpaRole> systemAdminRoles = new HashSet<JpaRole>();
-        Set<String> systemAdminRolesIds = new HashSet<String>();
+        Set<JpaRole> systemAdminRoles = new HashSet<>();
+        Set<String> systemAdminRolesIds = new HashSet<>();
 
         // Add global system roles as defined in the code base
         for (String role : SecurityConstants.GLOBAL_SYSTEM_ROLES) {
@@ -290,8 +299,9 @@ public class AdminUserAndGroupLoader implements OrganizationDirectoryListener {
       Stream<String> stream = Stream.$(IOUtils.readLines(rolesIS)).filter(new Fn<String, Boolean>() {
         @Override
         public Boolean apply(String line) {
-          if (StringUtils.trimToEmpty(line).startsWith("#"))
+          if (StringUtils.trimToEmpty(line).startsWith("#")) {
             return false;
+          }
           return true;
         }
       });
@@ -326,6 +336,7 @@ public class AdminUserAndGroupLoader implements OrganizationDirectoryListener {
    * @param groupRoleProvider
    *          the groupRoleProvider to set
    */
+  @Reference(name = "groupRoleProvider")
   void setGroupRoleProvider(JpaGroupRoleProvider groupRoleProvider) {
     this.groupRoleProvider = groupRoleProvider;
   }
@@ -336,6 +347,7 @@ public class AdminUserAndGroupLoader implements OrganizationDirectoryListener {
    * @param userAndRoleProvider
    *          the user and role provider to set
    */
+  @Reference(name = "userAndRoleProvider")
   void setUserAndRoleProvider(JpaUserAndRoleProvider userAndRoleProvider) {
     this.userAndRoleProvider = userAndRoleProvider;
   }
@@ -346,6 +358,7 @@ public class AdminUserAndGroupLoader implements OrganizationDirectoryListener {
    * @param organizationDirectoryService
    *          the organizationDirectoryService to set
    */
+  @Reference(name = "organizationDirectoryService")
   void setOrganizationDirectoryService(OrganizationDirectoryService organizationDirectoryService) {
     this.organizationDirectoryService = organizationDirectoryService;
     this.organizationDirectoryService.addOrganizationDirectoryListener(this);
@@ -357,6 +370,7 @@ public class AdminUserAndGroupLoader implements OrganizationDirectoryListener {
    * @param securityService
    *          the security service
    */
+  @Reference(name = "security-service")
   void setSecurityService(SecurityService securityService) {
     this.securityService = securityService;
   }

@@ -10,6 +10,7 @@ $(document).ready(function () {
     if (window.location !== window.parent.location) {
         addTitleToCodeTag();
         addCopyToClipboardButton();
+        linkHeaders();
     } else {
         (function (i, s, o, g, r, a, m) {
             i['GoogleAnalyticsObject'] = r;
@@ -26,7 +27,23 @@ $(document).ready(function () {
         ga('send', 'pageview');
     }
     tocPaneFix();
+    tooltips();
 });
+
+/**
+ * Style the tooltips.
+ */
+function tooltips() {
+    tippy('[title]', {
+        content(reference) {
+            const title = reference.getAttribute('title');
+            reference.removeAttribute('title');
+            return title;
+        },
+        interactive: true,
+        theme: 'opencast',
+    });
+}
 
 
 /**
@@ -49,12 +66,46 @@ function addTitleToCodeTag() {
     SPAN.classList.add("etc-span");
     SPAN.title = '"etc" represents the configuration directory of Opencast.\nThis directory is often located at "/etc/opencast".';
 
+    let branch = 'develop';
+    if (window.location.host == 'docs.opencast.org') {
+        branch = window.location.pathname.substring(1).replace(/\/admin.*/, '');
+    }
+    const repobase = `https://github.com/opencast/opencast/blob/${branch}/`;
+
     var codeElementList = document.getElementsByTagName("CODE");
     for (var i = 0; i < codeElementList.length; i++) {
         var CODE = codeElementList[i];
+
         if (typeof CODE.innerText !== 'undefined') {
             if (CODE.innerText.startsWith('etc/')) {
                 CODE.innerHTML = CODE.innerHTML.replace(/^etc/, SPAN.outerHTML);
+
+                // Link repository
+                let a = document.createElement('a');
+                a.innerHTML = '<i style="color: black; vertical-align: super; margin: -5px 0 0 2px" class="fa fa-github"></i>'
+                a.title = 'Find configuration file in GitHub repository';
+                a.href = repobase + CODE.innerText + '#repo-content-pjax-container';
+                CODE.parentNode.insertBefore(a, CODE.nextSibling);
+            }
+        }
+    }
+}
+
+/**
+ * Adds a section links to headers
+ */
+function linkHeaders() {
+    for (var i = 1; i < 4; i++) {
+        var headers = document.getElementsByTagName('h' + i);
+        for (var j = 0; j < headers.length; j++) {
+            var header = headers[j],
+                id = header.getAttribute('id')
+            if (id) {
+                var a = document.createElement('a');
+                a.innerText = '🔗';
+                a.classList.add('header-link');
+                a.setAttribute('href', '#' + id);
+                header.appendChild(a);
             }
         }
     }
@@ -119,6 +170,7 @@ function createButton(id) {
     button.classList.add("glyphicon");
     button.classList.add("glyphicon-copy");
     button.classList.add("click-and-copy-button");
+    button.title = 'Copy to clipboard';
     return button;
 }
 

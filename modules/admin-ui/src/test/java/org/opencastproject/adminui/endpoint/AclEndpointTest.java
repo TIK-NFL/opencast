@@ -24,7 +24,6 @@ package org.opencastproject.adminui.endpoint;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
-import static org.opencastproject.test.rest.RestServiceTestEnv.localhostRandomPort;
 import static org.opencastproject.test.rest.RestServiceTestEnv.testEnvForClasses;
 
 import org.opencastproject.adminui.util.ServiceEndpointTestsUtil;
@@ -32,10 +31,12 @@ import org.opencastproject.test.rest.NotFoundExceptionMapper;
 import org.opencastproject.test.rest.RestServiceTestEnv;
 
 import org.apache.commons.httpclient.HttpStatus;
+import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -48,8 +49,7 @@ import io.restassured.http.ContentType;
 
 public class AclEndpointTest {
 
-  private static final RestServiceTestEnv rt = testEnvForClasses(localhostRandomPort(), TestAclEndpoint.class,
-          NotFoundExceptionMapper.class);
+  private static final RestServiceTestEnv rt = testEnvForClasses(TestAclEndpoint.class, NotFoundExceptionMapper.class);
 
   private JSONParser parser;
 
@@ -82,7 +82,19 @@ public class AclEndpointTest {
   }
 
   @Test
-  public void testGetAllWithParams() throws ParseException, IOException {
+  public void testGetAllRoles() throws IOException, ParseException {
+    InputStream stream = AclEndpointTest.class.getResourceAsStream("/roles.json");
+    InputStreamReader reader = new InputStreamReader(stream);
+    JSONArray expectedArray = (JSONArray) new JSONParser().parse(reader);
+
+    JSONArray actualArray = (JSONArray) parser.parse(given().expect().statusCode(HttpStatus.SC_OK)
+      .contentType(ContentType.JSON).when().get(rt.host("/roles.json")).asString());
+
+    Assert.assertEquals(expectedArray, actualArray);
+  }
+
+  @Test
+  public void testGetAllAclsWithParams() throws ParseException, IOException {
     int limit = 100;
     int offset = 1;
 
@@ -103,6 +115,27 @@ public class AclEndpointTest {
     given().queryParam("limit", limit).queryParam("offset", offset).expect().statusCode(HttpStatus.SC_OK)
             .contentType(ContentType.JSON).body("total", equalTo(2)).body("offset", equalTo(offset))
             .body("limit", equalTo(100)).body("results", hasSize(0)).when().get(rt.host("/acls.json"));
+  }
+
+  @Test
+  public void testGetAllRolesWithParams() throws ParseException, IOException {
+
+    InputStream stream = AclEndpointTest.class.getResourceAsStream("/roles.json");
+    InputStreamReader reader = new InputStreamReader(stream);
+    JSONArray allRoles = (JSONArray) new JSONParser().parse(reader);
+
+    int limit = 2;
+    int offset = 1;
+    String target = "ACL";
+
+    JSONArray expectedArray = new JSONArray();
+    expectedArray.add(allRoles.get(1));
+    expectedArray.add(allRoles.get(3));
+
+    JSONArray actualArray = (JSONArray) parser.parse(given().queryParam("limit", limit).queryParam("offset", offset)
+      .queryParam("target", target).expect().statusCode(HttpStatus.SC_OK)
+      .contentType(ContentType.JSON).when().get(rt.host("/roles.json")).asString());
+    Assert.assertEquals(expectedArray, actualArray);
   }
 
 }

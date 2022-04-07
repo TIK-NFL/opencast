@@ -68,7 +68,7 @@ public final class WorkflowConditionInterpreter {
       int matchStart = matcher.start();
       int matchEnd = matcher.end();
       result.append(source, cursor, matchStart); // add the content before the match
-      String key = source.substring(matchStart + 2, matchEnd - 1);
+      String key = matcher.group("varname");
       String systemProperty = systemPropertyGetter.apply(key);
       String providedProperty = null;
       if (properties != null) {
@@ -90,7 +90,7 @@ public final class WorkflowConditionInterpreter {
             if ("false".equals(toAppend) || "true".equals(toAppend)) {
               result.append(toAppend);
             } else {
-              Integer.parseInt(toAppend);
+              Float.parseFloat(toAppend);
               result.append(toAppend);
             }
           } catch (NumberFormatException e) {

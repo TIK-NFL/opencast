@@ -21,9 +21,12 @@
 
 package org.opencastproject.series.impl.persistence;
 
+import static org.opencastproject.security.api.SecurityConstants.GLOBAL_ADMIN_ROLE;
+
 import org.opencastproject.metadata.dublincore.DublinCore;
 import org.opencastproject.metadata.dublincore.DublinCoreCatalog;
 import org.opencastproject.metadata.dublincore.DublinCoreCatalogService;
+import org.opencastproject.metadata.dublincore.DublinCoreXmlFormat;
 import org.opencastproject.security.api.AccessControlList;
 import org.opencastproject.security.api.AccessControlParser;
 import org.opencastproject.security.api.AccessControlParsingException;
@@ -34,6 +37,7 @@ import org.opencastproject.security.api.SecurityConstants;
 import org.opencastproject.security.api.SecurityService;
 import org.opencastproject.security.api.UnauthorizedException;
 import org.opencastproject.security.api.User;
+import org.opencastproject.series.api.Series;
 import org.opencastproject.series.impl.SeriesServiceDatabase;
 import org.opencastproject.series.impl.SeriesServiceDatabaseException;
 import org.opencastproject.util.NotFoundException;
@@ -42,26 +46,39 @@ import com.entwinemedia.fn.data.Opt;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.osgi.service.component.ComponentContext;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.EntityTransaction;
 import javax.persistence.NoResultException;
 import javax.persistence.Query;
+import javax.persistence.TypedQuery;
 
 /**
  * Implements {@link SeriesServiceDatabase}. Defines permanent storage for series.
  */
+@Component(
+    property = {
+        "service.description=Series Service"
+    },
+    immediate = true,
+    service = { SeriesServiceDatabase.class }
+)
 public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
 
   /** Logging utilities */
@@ -80,6 +97,7 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
   protected SecurityService securityService;
 
   /** OSGi DI */
+  @Reference(name = "entityManagerFactory", target = "(osgi.unit.name=org.opencastproject.series.impl.persistence)")
   public void setEntityManagerFactory(EntityManagerFactory emf) {
     this.emf = emf;
   }
@@ -89,6 +107,7 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
    *
    * @param cc
    */
+  @Activate
   public void activate(ComponentContext cc) {
     logger.info("Activating persistence manager for series");
   }
@@ -99,6 +118,7 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
    * @param securityService
    *          the securityService to set
    */
+  @Reference(name = "security-service")
   public void setSecurityService(SecurityService securityService) {
     this.securityService = securityService;
   }
@@ -109,6 +129,7 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
    * @param dcService
    *          {@link DublinCoreCatalogService} object
    */
+  @Reference(name = "dc")
   public void setDublinCoreService(DublinCoreCatalogService dcService) {
     this.dcService = dcService;
   }
@@ -156,12 +177,16 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
           throw new UnauthorizedException(currentUser + " is not authorized to update series " + seriesId);
         }
       }
-      em.remove(entity);
+
+      Date now = new Date();
+      entity.setModifiedDate(now);
+      entity.setDeletionDate(now);
+      em.merge(entity);
       tx.commit();
     } catch (NotFoundException e) {
       throw e;
     } catch (Exception e) {
-      logger.error("Could not delete series: {}", e.getMessage());
+      logger.error("Could not delete series", e);
       if (tx.isActive()) {
         tx.rollback();
       }
@@ -201,12 +226,13 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
 
       properties.remove(propertyName);
       entity.setProperties(properties);
+      entity.setModifiedDate(new Date());
       em.merge(entity);
       tx.commit();
     } catch (NotFoundException e) {
       throw e;
     } catch (Exception e) {
-      logger.error("Could not delete series: {}", e.getMessage());
+      logger.error("Could not delete property for series '{}'", seriesId, e);
       if (tx.isActive()) {
         tx.rollback();
       }
@@ -229,7 +255,7 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
     try {
       return query.getResultList();
     } catch (Exception e) {
-      logger.error("Could not retrieve all series: {}", e.getMessage());
+      logger.error("Could not retrieve all series", e);
       throw new SeriesServiceDatabaseException(e);
     } finally {
       em.close();
@@ -258,7 +284,7 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
     } catch (NotFoundException e) {
       throw e;
     } catch (Exception e) {
-      logger.error("Could not retrieve ACL for series '{}': {}", seriesId, e.getMessage());
+      logger.error("Could not retrieve ACL for series '{}'", seriesId, e);
       throw new SeriesServiceDatabaseException(e);
     } finally {
       em.close();
@@ -290,13 +316,20 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
     DublinCoreCatalog newSeries = null;
     try {
       tx.begin();
-      SeriesEntity entity = getSeriesEntity(seriesId, em);
-      if (entity == null) {
+      SeriesEntity entity = getPotentiallyDeletedSeriesEntity(seriesId, em);
+      if (entity == null || entity.isDeleted()) {
+        // If the series existed but is marked deleted, we completely delete it
+        // here to make sure no remains of the old series linger.
+        if (entity != null) {
+          this.deleteSeries(seriesId);
+        }
+
         // no series stored, create new entity
         entity = new SeriesEntity();
         entity.setOrganization(securityService.getOrganization().getId());
         entity.setSeriesId(seriesId);
         entity.setSeries(seriesXML);
+        entity.setModifiedDate(new Date());
         em.persist(entity);
         newSeries = dc;
       } else {
@@ -311,12 +344,13 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
           }
         }
         entity.setSeries(seriesXML);
+        entity.setModifiedDate(new Date());
         em.merge(entity);
       }
       tx.commit();
       return newSeries;
     } catch (Exception e) {
-      logger.error("Could not update series: {}", e.getMessage());
+      logger.error("Could not update series", e);
       if (tx.isActive()) {
         tx.rollback();
       }
@@ -360,11 +394,67 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
     } catch (NotFoundException e) {
       throw e;
     } catch (Exception e) {
-      logger.error("Could not update series: {}", e.getMessage());
+      logger.error("Could not retrieve series with ID '{}'", seriesId, e);
       if (tx.isActive()) {
         tx.rollback();
       }
       throw new SeriesServiceDatabaseException(e);
+    } finally {
+      em.close();
+    }
+  }
+
+  @Override
+  public List<Series> getAllForAdministrativeRead(Date from, Optional<Date> to, int limit)
+          throws SeriesServiceDatabaseException, UnauthorizedException {
+    // Validate parameters
+    if (limit <= 0) {
+      throw new IllegalArgumentException("limit has to be > 0");
+    }
+
+    // Make sure the user is actually an administrator of sorts
+    User user = securityService.getUser();
+    if (!user.hasRole(GLOBAL_ADMIN_ROLE) && !user.hasRole(user.getOrganization().getAdminRole())) {
+      throw new UnauthorizedException(user, getClass().getName() + ".getModifiedInRangeForAdministrativeRead");
+    }
+
+    // Load series from DB.
+    EntityManager em = emf.createEntityManager();
+    try {
+      TypedQuery<SeriesEntity> q;
+      if (to.isPresent()) {
+        if (from.after(to.get())) {
+          throw new IllegalArgumentException("`from` is after `to`");
+        }
+
+        q = em.createNamedQuery("Series.getAllModifiedInRange", SeriesEntity.class)
+            .setParameter("from", from)
+            .setParameter("to", to.get())
+            .setParameter("organization", user.getOrganization().getId())
+            .setMaxResults(limit);
+      } else {
+        q = em.createNamedQuery("Series.getAllModifiedSince", SeriesEntity.class)
+            .setParameter("since", from)
+            .setParameter("organization", user.getOrganization().getId())
+            .setMaxResults(limit);
+      }
+
+      final List<Series> out = new ArrayList<>();
+      for (SeriesEntity entity : q.getResultList()) {
+        final Series series = new Series();
+        series.setId(entity.getSeriesId());
+        series.setOrganization(entity.getOrganization());
+        series.setDublinCore(DublinCoreXmlFormat.read(entity.getDublinCoreXML()));
+        series.setAccessControl(entity.getAccessControl());
+        series.setModifiedDate(entity.getModifiedDate());
+        series.setDeletionDate(entity.getDeletionDate());
+        out.add(series);
+      }
+
+      return out;
+    } catch (Exception e) {
+      String msg = String.format("Could not retrieve series modified between '%s' and '%s'", from, to);
+      throw new SeriesServiceDatabaseException(msg, e);
     } finally {
       em.close();
     }
@@ -394,7 +484,7 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
     } catch (NotFoundException e) {
       throw e;
     } catch (Exception e) {
-      logger.error("Could not update series: {}", e.getMessage());
+      logger.error("Could not retrieve properties of series '{}'", seriesId, e);
       if (tx.isActive()) {
         tx.rollback();
       }
@@ -432,7 +522,7 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
     } catch (NotFoundException e) {
       throw e;
     } catch (Exception e) {
-      logger.error("Could not update series: {}", e.getMessage());
+      logger.error("Could not retrieve property '{}' of series '{}'", propertyName, seriesId, e);
       if (tx.isActive()) {
         tx.rollback();
       }
@@ -495,7 +585,7 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
     try {
       serializedAC = AccessControlParser.toXml(accessControl);
     } catch (Exception e) {
-      logger.error("Could not serialize access control parameter: {}", e.getMessage());
+      logger.error("Could not serialize access control parameter", e);
       throw new SeriesServiceDatabaseException(e);
     }
     EntityManager em = emf.createEntityManager();
@@ -521,13 +611,14 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
         updated = true;
       }
       entity.setAccessControl(serializedAC);
+      entity.setModifiedDate(new Date());
       em.merge(entity);
       tx.commit();
       return updated;
     } catch (NotFoundException e) {
       throw e;
     } catch (Exception e) {
-      logger.error("Could not update series: {}", e.getMessage());
+      logger.error("Could not store ACL for series '{}'", seriesId, e);
       if (tx.isActive()) {
         tx.rollback();
       }
@@ -574,6 +665,7 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
       Map<String, String> properties = entity.getProperties();
       properties.put(propertyName, propertyValue);
       entity.setProperties(properties);
+      entity.setModifiedDate(new Date());
       em.merge(entity);
       tx.commit();
     } catch (NotFoundException e) {
@@ -582,12 +674,12 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
       if (tx.isActive()) {
         tx.rollback();
       }
-      logger.error("Couldn't update series {} with property: {}:{} because {}", seriesId, propertyName, propertyValue,
-              ExceptionUtils.getStackTrace(e));
+      logger.error("Couldn't update series {} with property: {}:{} because", seriesId, propertyName, propertyValue, e);
       throw new SeriesServiceDatabaseException(e);
     } finally {
-      if (em != null)
+      if (em != null) {
         em.close();
+      }
     }
   }
 
@@ -598,9 +690,23 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
    *          the series identifier
    * @param em
    *          an open entity manager
-   * @return the series entity, or null if not found
+   * @return the series entity, or null if not found or if the series is deleted.
    */
   protected SeriesEntity getSeriesEntity(String id, EntityManager em) {
+    SeriesEntity entity = getPotentiallyDeletedSeriesEntity(id, em);
+    return entity == null || entity.isDeleted() ? null : entity;
+  }
+
+  /**
+   * Gets a potentially deleted series by its ID, using the current organizational context.
+   *
+   * @param id
+   *          the series identifier
+   * @param em
+   *          an open entity manager
+   * @return the series entity, or null if not found
+   */
+  protected SeriesEntity getPotentiallyDeletedSeriesEntity(String id, EntityManager em) {
     String orgId = securityService.getOrganization().getId();
     Query q = em.createNamedQuery("seriesById").setParameter("seriesId", id).setParameter("organization", orgId);
     try {
@@ -624,6 +730,7 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
         success = false;
       } else {
         series.addElement(type, data);
+        series.setModifiedDate(new Date());
         em.merge(series);
         tx.commit();
         success = true;
@@ -634,8 +741,9 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
       }
       throw new SeriesServiceDatabaseException(e);
     } finally {
-      if (em != null)
+      if (em != null) {
         em.close();
+      }
     }
     return success;
   }
@@ -655,6 +763,7 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
       } else {
         if (series.getElements().containsKey(type)) {
           series.removeElement(type);
+          series.setModifiedDate(new Date());
           em.merge(series);
           tx.commit();
           success = true;
@@ -668,8 +777,9 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
       }
       throw new SeriesServiceDatabaseException(e);
     } finally {
-      if (em != null)
+      if (em != null) {
         em.close();
+      }
     }
     return success;
   }
@@ -685,17 +795,18 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
         data = Opt.none();
       } else {
         Map<String, byte[]> elements = series.getElements();
-        if (elements.containsKey(type))
+        if (elements.containsKey(type)) {
           data = Opt.some(elements.get(type));
-        else {
+        } else {
           data = Opt.none();
         }
       }
     } catch (Exception e) {
       throw new SeriesServiceDatabaseException(e);
     } finally {
-      if (em != null)
+      if (em != null) {
         em.close();
+      }
     }
     return data;
   }
@@ -715,8 +826,9 @@ public class SeriesServiceDatabaseImpl implements SeriesServiceDatabase {
     } catch (Exception e) {
       throw new SeriesServiceDatabaseException(e);
     } finally {
-      if (em != null)
+      if (em != null) {
         em.close();
+      }
     }
     return elements;
   }

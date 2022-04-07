@@ -33,18 +33,17 @@ import org.opencastproject.mediapackage.MediaPackageElementFlavor;
 import org.opencastproject.mediapackage.MediaPackageElements;
 import org.opencastproject.util.MimeTypes;
 import org.opencastproject.workflow.api.AbstractWorkflowOperationHandler;
+import org.opencastproject.workflow.api.ConfiguredTagsAndFlavors;
 import org.opencastproject.workflow.api.WorkflowInstance;
 import org.opencastproject.workflow.api.WorkflowOperationException;
 import org.opencastproject.workflow.api.WorkflowOperationResult;
 import org.opencastproject.workflow.api.WorkflowOperationResult.Action;
 import org.opencastproject.workspace.api.Workspace;
 
-import com.entwinemedia.fn.Stream;
 import com.entwinemedia.fn.data.Opt;
 import com.entwinemedia.fn.fns.Strings;
 
 import org.apache.commons.io.output.ByteArrayOutputStream;
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,6 +52,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.URI;
+import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
@@ -64,10 +64,8 @@ public class ExportWorkflowPropertiesWOH extends AbstractWorkflowOperationHandle
 
   /** Configuration options */
   public static final String KEYS_PROPERTY = "keys";
-  public static final String TARGET_FLAVOR_PROPERTY = "target-flavor";
-  public static final String TARGET_TAGS_PROPERTY = "target-tags";
 
-  public static final String DEFAULT_TARGET_FLAVOR = MediaPackageElements.PROCESSING_PROPERTIES.toString();
+  public static final MediaPackageElementFlavor DEFAULT_TARGET_FLAVOR = MediaPackageElements.PROCESSING_PROPERTIES;
   public static final String EXPORTED_PROPERTIES_FILENAME = "processing-properties.xml";
 
   /** The logging facility */
@@ -87,9 +85,14 @@ public class ExportWorkflowPropertiesWOH extends AbstractWorkflowOperationHandle
     logger.info("Start exporting workflow properties for workflow {}", workflowInstance);
     final MediaPackage mediaPackage = workflowInstance.getMediaPackage();
     final Set<String> keys = $(getOptConfig(workflowInstance, KEYS_PROPERTY)).bind(Strings.splitCsv).toSet();
-    final String targetFlavorString = getOptConfig(workflowInstance, TARGET_FLAVOR_PROPERTY).getOr(DEFAULT_TARGET_FLAVOR);
-    final Stream<String> targetTags = $(getOptConfig(workflowInstance, TARGET_TAGS_PROPERTY)).bind(Strings.splitCsv);
-    final MediaPackageElementFlavor targetFlavor = MediaPackageElementFlavor.parseFlavor(targetFlavorString);
+    ConfiguredTagsAndFlavors tagsAndFlavors = getTagsAndFlavors(workflowInstance,
+        Configuration.none, Configuration.none, Configuration.many, Configuration.many);
+    List<MediaPackageElementFlavor> targetFlavorList = tagsAndFlavors.getTargetFlavors();
+    if (targetFlavorList.isEmpty()) {
+      targetFlavorList.add(DEFAULT_TARGET_FLAVOR);
+    }
+    final List<String> targetTags = tagsAndFlavors.getTargetTags();
+    final MediaPackageElementFlavor targetFlavor = targetFlavorList.get(0);
 
     // Read optional existing workflow properties from mediapackage
     Properties workflowProps = new Properties();
@@ -113,14 +116,13 @@ public class ExportWorkflowPropertiesWOH extends AbstractWorkflowOperationHandle
     try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
       workflowProps.storeToXML(out, null, "UTF-8");
       String elementId = UUID.randomUUID().toString();
-      URI uri = workspace.put(mediaPackage.getIdentifier().compact(), elementId, EXPORTED_PROPERTIES_FILENAME,
+      URI uri = workspace.put(mediaPackage.getIdentifier().toString(), elementId, EXPORTED_PROPERTIES_FILENAME,
               new ByteArrayInputStream(out.toByteArray()));
       MediaPackageElementBuilder builder = MediaPackageElementBuilderFactory.newInstance().newElementBuilder();
       attachment = (Attachment) builder.elementFromURI(uri, Attachment.TYPE, targetFlavor);
       attachment.setMimeType(MimeTypes.XML);
     } catch (IOException e) {
-      logger.error("Unable to store workflow properties as Attachment with flavor '{}': {}", targetFlavorString,
-              ExceptionUtils.getStackTrace(e));
+      logger.error("Unable to store workflow properties as Attachment with flavor '{}':", targetFlavorList.get(0), e);
       throw new WorkflowOperationException("Unable to store workflow properties as Attachment", e);
     }
 
@@ -135,7 +137,7 @@ public class ExportWorkflowPropertiesWOH extends AbstractWorkflowOperationHandle
       mediaPackage.remove(existingPropsElem.get());
     mediaPackage.add(attachment);
 
-    logger.info("Added properties from {} as Attachment with flavor {}", workflowInstance, targetFlavorString);
+    logger.info("Added properties from {} as Attachment with flavor {}", workflowInstance, targetFlavorList.get(0));
 
     logger.debug("Workflow properties: {}", propertiesAsString(workflowProps));
 
