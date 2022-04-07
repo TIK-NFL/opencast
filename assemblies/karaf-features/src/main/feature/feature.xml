@@ -680,7 +680,6 @@
     <bundle start-level="82">mvn:org.opencastproject/opencast-distribution-service-aws-s3-api/${project.version}</bundle>
     <bundle start-level="82">mvn:org.opencastproject/opencast-distribution-service-aws-s3/${project.version}</bundle>
     <bundle start-level="82">mvn:org.opencastproject/opencast-distribution-service-download/${project.version}</bundle>
-    <bundle start-level="82">mvn:org.opencastproject/opencast-distribution-service-adaptive-streaming-wowza/${project.version}</bundle>
     <bundle start-level="82">mvn:org.opencastproject/opencast-distribution-service-streaming-wowza/${project.version}</bundle>
     <bundle start-level="83">mvn:org.opencastproject/opencast-editor/${project.version}</bundle>
     <bundle start-level="83">mvn:org.opencastproject/opencast-editor-service-remote/${project.version}</bundle>
