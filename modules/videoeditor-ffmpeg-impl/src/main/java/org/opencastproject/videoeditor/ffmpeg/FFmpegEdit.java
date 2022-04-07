@@ -102,7 +102,8 @@ public class FFmpegEdit {
       this.vfade = Float.parseFloat(DEFAULT_VIDEO_FADE);
     }
     this.ffmpegProperties = properties.getProperty(VideoEditorProperties.FFMPEG_PROPERTIES, DEFAULT_FFMPEG_PROPERTIES);
-    this.ffmpegOutputProperties = properties.getProperty(VideoEditorProperties.FFMPEG_OUTPUT_PROPERTIES, DEFAULT_FFMPEG_OUTPUT_PROPERTIES);
+    this.ffmpegOutputProperties = properties.getProperty(VideoEditorProperties.FFMPEG_OUTPUT_PROPERTIES,
+            DEFAULT_FFMPEG_OUTPUT_PROPERTIES);
     this.ffmpegScaleFilter = properties.getProperty(VideoEditorProperties.FFMPEG_SCALE_FILTER, null);
     this.videoCodec = properties.getProperty(VideoEditorProperties.VIDEO_CODEC, null);
     this.audioCodec = properties.getProperty(VideoEditorProperties.AUDIO_CODEC, null);
