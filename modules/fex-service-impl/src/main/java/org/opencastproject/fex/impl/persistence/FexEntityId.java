@@ -65,23 +65,30 @@ public class FexEntityId implements Serializable {
 
   @Override
   public boolean equals(Object obj) {
-    if (this == obj)
+    if (this == obj) {
       return true;
-    if (obj == null)
+    }
+    if (obj == null) {
       return false;
-    if (getClass() != obj.getClass())
+    }
+    if (getClass() != obj.getClass()) {
       return false;
+    }
     FexEntityId other = (FexEntityId) obj;
     if (fexId == null) {
-      if (other.fexId != null)
+      if (other.fexId != null) {
         return false;
-    } else if (!fexId.equals(other.fexId))
+      }
+    } else if (!fexId.equals(other.fexId)) {
       return false;
+    }
     if (organization == null) {
-      if (other.organization != null)
+      if (other.organization != null) {
         return false;
-    } else if (!organization.equals(other.organization))
+      }
+    } else if (!organization.equals(other.organization)) {
       return false;
+    }
     return true;
   }
 }

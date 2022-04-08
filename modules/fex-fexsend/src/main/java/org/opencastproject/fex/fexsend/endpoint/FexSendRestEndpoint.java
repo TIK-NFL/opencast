@@ -57,13 +57,19 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
 @Path("")
-@RestService(name = "fexsend", title = "Fex Send Service", abstractText = "This service performs sending of media files.", notes = {
-        "All paths above are relative to the REST endpoint base (something like http://your.server/files)",
-        "If the service is down or not working it will return a status 503, this means the the underlying service is "
-                + "not working and is either restarting or has failed",
-        "A status code 500 means a general failure has occurred which is not recoverable and was not anticipated. In "
-                + "other words, there is a bug! You should file an error report with your server logs from the time when the "
-                + "error occurred: <a href=\"https://opencast.jira.com\">Opencast Issue Tracker</a>" })
+@RestService(
+        name = "fexsend",
+        title = "Fex Send Service",
+        abstractText = "This service performs sending of media files.",
+        notes = {
+          "All paths above are relative to the REST endpoint base (something like http://your.server/files)",
+          "If the service is down or not working it will return a status 503, this means the the underlying service is "
+                  + "not working and is either restarting or has failed",
+          "A status code 500 means a general failure has occurred which is not recoverable and was not anticipated. In "
+                  + "other words, there is a bug! You should file an error report with your server logs from the time "
+                  + "when the error occurred: <a href=\"https://opencast.jira.com\">Opencast Issue Tracker</a>"
+        }
+)
 public class FexSendRestEndpoint extends AbstractJobProducerEndpoint {
 
   /**
@@ -133,17 +139,30 @@ public class FexSendRestEndpoint extends AbstractJobProducerEndpoint {
   @POST
   @Path("")
   @Produces(MediaType.TEXT_XML)
-  @RestQuery(name = "sendFex", description = "Submit a track for sending corresponding fex.", restParameters = {
-          @RestParameter(description = "The track to send.", isRequired = true, name = "track", type = RestParameter.Type.FILE) }, reponses = {
-          @RestResponse(description = "The job ID to use when searching for corresponding fex request.", responseCode = HttpServletResponse.SC_OK),
-          @RestResponse(description = "The \"track\" is NULL or not a valid track type.", responseCode = HttpServletResponse.SC_BAD_REQUEST),
-          @RestResponse(description = "No Fex request found for Track", responseCode = HttpServletResponse.SC_NO_CONTENT),
-          @RestResponse(description = "The underlying service could not send the track.", responseCode = HttpServletResponse.SC_INTERNAL_SERVER_ERROR) }, returnDescription = "The job ID to use when polling for the resulting mpeg7 catalog.")
+  @RestQuery(
+          name = "sendFex",
+          description = "Submit a track for sending corresponding fex.",
+          restParameters = {
+            @RestParameter(description = "The track to send.", isRequired = true, name = "track",
+                    type = RestParameter.Type.FILE)
+          },
+          responses = {
+            @RestResponse(description = "The job ID to use when searching for corresponding fex request.",
+                    responseCode = HttpServletResponse.SC_OK),
+            @RestResponse(description = "The \"track\" is NULL or not a valid track type.",
+                    responseCode = HttpServletResponse.SC_BAD_REQUEST),
+            @RestResponse(description = "No Fex request found for Track",
+                    responseCode = HttpServletResponse.SC_NO_CONTENT),
+            @RestResponse(description = "The underlying service could not send the track.",
+                    responseCode = HttpServletResponse.SC_INTERNAL_SERVER_ERROR)
+          },
+          returnDescription = "The job ID to use when polling for the resulting mpeg7 catalog."
+  )
   public Response sendFex(@FormParam("track") String trackAsXml) throws Exception {
     // Ensure that the POST parameters are present
-    if (StringUtils.isBlank(trackAsXml))
+    if (StringUtils.isBlank(trackAsXml)) {
       return Response.status(Response.Status.BAD_REQUEST).entity("track must not be null").build();
-
+    }
     // Deserialize the track
     MediaPackage mediaPackage = MediaPackageElementParser.getFromXml(trackAsXml).getMediaPackage();
     String seriesId = mediaPackage.getSeries();
@@ -176,10 +195,11 @@ public class FexSendRestEndpoint extends AbstractJobProducerEndpoint {
    */
   @Override
   public JobProducer getService() {
-    if (service instanceof JobProducer)
+    if (service instanceof JobProducer) {
       return (JobProducer) service;
-    else
+    } else {
       return null;
+    }
   }
 
   /**

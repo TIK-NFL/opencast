@@ -44,8 +44,10 @@ import javax.persistence.Table;
 @Table(name = "mh_fex")
 @NamedQueries({ @NamedQuery(name = "Fex.findAll", query = "select f from FexEntity f"),
         @NamedQuery(name = "Fex.getCount", query = "select COUNT(f) from FexEntity f"),
-        @NamedQuery(name = "fexById", query = "select f from FexEntity as f where f.fexId=:fexId and f.organization=:organization"),
-        @NamedQuery(name = "fexBySeries", query = "select f from FexEntity as f where f.seriesId=:seriesId and f.organization=:organization"),
+        @NamedQuery(name = "fexById", query = "select f from FexEntity as f where f.fexId=:fexId "
+                + "and f.organization=:organization"),
+        @NamedQuery(name = "fexBySeries", query = "select f from FexEntity as f where f.seriesId=:seriesId "
+                + "and f.organization=:organization"),
         @NamedQuery(name = "allFexInOrg", query = "select f from FexEntity as f where f.organization=:organization") })
 public class FexEntity {
   @Id

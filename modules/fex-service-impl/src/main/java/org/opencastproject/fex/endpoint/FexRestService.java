@@ -49,6 +49,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Objects;
 
 import javax.ws.rs.DELETE;
 import javax.ws.rs.FormParam;
@@ -65,13 +66,18 @@ import javax.ws.rs.core.Response;
  * REST endpoint for Fex Service
  */
 @Path("/")
-@RestService(name = "fexservice", title = "Fex Service", abstractText = "This service creates, edits and retrieves and helps managing fex.", notes = "API for creating, editing and managing fex")
+@RestService(
+      name = "fexservice",
+      title = "Fex Service",
+      abstractText = "This service creates, edits and retrieves and helps managing fex.",
+      notes = "API for creating, editing and managing fex"
+)
 public class FexRestService {
 
   /**
-   * Suffix to mark decending ordering of results
+   * Suffix to mark descending ordering of results
    */
-  public static final String DECENDING_SUFFIX = "_DESC";
+  public static final String DESCENDING_SUFFIX = "_DESC";
   private static final String FEX_ELEMENT_CONTENT_TYPE_PREFIX = "fex/";
   /**
    * Logging utility
@@ -96,8 +102,6 @@ public class FexRestService {
 
   /**
    * OSGi callback for setting fex service.
-   *
-   * @param fexService
    */
   public void setService(FexService fexService) {
     this.fexService = fexService;
@@ -109,11 +113,7 @@ public class FexRestService {
     } else {
       String ccServerUrl = cc.getBundleContext().getProperty(OpencastConstants.SERVER_URL_PROPERTY);
       logger.debug("Configured server url is {}", ccServerUrl);
-      if (ccServerUrl == null) {
-        this.serverUrl = "http://localhost:8080";
-      } else {
-        this.serverUrl = ccServerUrl;
-      }
+      this.serverUrl = Objects.requireNonNullElse(ccServerUrl, "http://localhost:8080");
     }
     serviceUrl = (String) cc.getProperties().get(RestConstants.SERVICE_PATH_PROPERTY);
   }
@@ -129,10 +129,17 @@ public class FexRestService {
   @GET
   @Produces(MediaType.APPLICATION_JSON)
   @Path("{fexId:.+}.json")
-  @RestQuery(name = "getAsJson", description = "Returns the fex with the given identifier", returnDescription = "Returns the fex object", pathParameters = {
-          @RestParameter(name = "fexId", isRequired = true, description = "The fex identifier", type = STRING) }, reponses = {
+  @RestQuery(
+        name = "getAsJson", description = "Returns the fex with the given identifier",
+        returnDescription = "Returns the fex object",
+        pathParameters = {
+          @RestParameter(name = "fexId", isRequired = true, description = "The fex identifier", type = STRING)
+        },
+        responses = {
           @RestResponse(responseCode = SC_OK, description = "The fex object."),
-          @RestResponse(responseCode = SC_NOT_FOUND, description = "No fex with this identifier was found.") })
+          @RestResponse(responseCode = SC_NOT_FOUND, description = "No fex with this identifier was found.")
+        }
+  )
   public Response getFexJason(@PathParam("fexId") String fexId) {
     logger.debug("Fex Lookup: {}", fexId);
     try {
@@ -149,10 +156,18 @@ public class FexRestService {
   @GET
   @Produces(MediaType.APPLICATION_JSON)
   @Path("/bySeriesId/{seriesId:.+}.json")
-  @RestQuery(name = "getAsJson", description = "Returns the fex with the given series identifier", returnDescription = "Returns the fex object", pathParameters = {
-          @RestParameter(name = "seriesId", isRequired = true, description = "The series identifier", type = STRING) }, reponses = {
+  @RestQuery(
+        name = "getAsJson",
+        description = "Returns the fex with the given series identifier",
+        returnDescription = "Returns the fex object",
+        pathParameters = {
+          @RestParameter(name = "seriesId", isRequired = true, description = "The series identifier", type = STRING)
+        },
+        responses = {
           @RestResponse(responseCode = SC_OK, description = "The fex object."),
-          @RestResponse(responseCode = SC_NOT_FOUND, description = "No fex with this series identifier was found.") })
+          @RestResponse(responseCode = SC_NOT_FOUND, description = "No fex with this series identifier was found.")
+        }
+  )
   public Response getFexBySeriesIdJason(@PathParam("seriesId") String seriesId) {
     logger.debug("Fex Lookup: {}", seriesId);
     try {
@@ -169,21 +184,20 @@ public class FexRestService {
   @GET
   @Path("allFex.json")
   @Produces(MediaType.APPLICATION_JSON)
-  @RestQuery(name = "getAll", description = "Returns a list of all fex", returnDescription = "Json list of identifier of all fex", reponses = {
+  @RestQuery(
+        name = "getAll", description = "Returns a list of all fex",
+        returnDescription = "Json list of identifier of all fex",
+        responses = {
           @RestResponse(responseCode = SC_OK, description = "A list with fex"),
-          @RestResponse(responseCode = SC_INTERNAL_SERVER_ERROR, description = "Error while processing the request") })
+          @RestResponse(responseCode = SC_INTERNAL_SERVER_ERROR, description = "Error while processing the request")
+        }
+  )
   public Response getAllFex() {
     try {
       List<Fex> allFex = fexService.getAllFex();
       JSONArray fexJsonArr = new JSONArray();
       for (Fex fex : allFex) {
-        JSONObject fexJsonObj = new JSONObject();
-        fexJsonObj.put("fexId", fex.getFexId());
-        fexJsonObj.put("seriesId", fex.getSeriesId());
-        fexJsonObj.put("lectureId", fex.getLectureId());
-        fexJsonObj.put("receiver", fex.getReceiver());
-        fexJsonObj.put("sbs", fex.isSbs());
-        fexJsonArr.add(fexJsonObj);
+        fexJsonArr.add(Fex.toJson(fex));
       }
       JSONObject resultJson = new JSONObject();
       resultJson.put("fex", fexJsonArr);
@@ -199,10 +213,18 @@ public class FexRestService {
 
   @GET
   @Path("{id}/receiver")
-  @RestQuery(name = "getReceiver", description = "Returns receiver of the fex", returnDescription = "Returns receiver of the fex", pathParameters = {
-          @RestParameter(name = "id", description = "ID of fex", isRequired = true, type = STRING) }, reponses = {
+  @RestQuery(
+        name = "getReceiver",
+        description = "Returns receiver of the fex",
+        returnDescription = "Returns receiver of the fex",
+        pathParameters = {
+          @RestParameter(name = "id", description = "ID of fex", isRequired = true, type = STRING)
+        },
+        responses = {
           @RestResponse(responseCode = SC_OK, description = "The fex' organization"),
-          @RestResponse(responseCode = SC_NOT_FOUND, description = "Fex with specified ID does not exist") })
+          @RestResponse(responseCode = SC_NOT_FOUND, description = "Fex with specified ID does not exist")
+        }
+  )
   public Response getReceiver(@PathParam("id") String fexId) {
     try {
       String receiver = fexService.getFexReceiver(fexId);
@@ -218,10 +240,17 @@ public class FexRestService {
 
   @GET
   @Path("{id}/lectureId")
-  @RestQuery(name = "getLectureId", description = "Returns lecture id of the fex", returnDescription = "Returns lecture id of the fex", pathParameters = {
-          @RestParameter(name = "id", description = "ID of fex", isRequired = true, type = STRING) }, reponses = {
+  @RestQuery(
+        name = "getLectureId", description = "Returns lecture id of the fex",
+        returnDescription = "Returns lecture id of the fex",
+        pathParameters = {
+          @RestParameter(name = "id", description = "ID of fex", isRequired = true, type = STRING)
+        },
+        responses = {
           @RestResponse(responseCode = SC_OK, description = "The fex' lecture id"),
-          @RestResponse(responseCode = SC_NOT_FOUND, description = "Fex with specified ID does not exist") })
+          @RestResponse(responseCode = SC_NOT_FOUND, description = "Fex with specified ID does not exist")
+        }
+  )
   public Response getLectureId(@PathParam("id") String fexId) {
     try {
       String lectureId = fexService.getLectureId(fexId);
@@ -237,10 +266,18 @@ public class FexRestService {
 
   @GET
   @Path("{id}/sbs")
-  @RestQuery(name = "getSbs", description = "Returns sbs status of the fex", returnDescription = "Returns sbs status of the fex", pathParameters = {
-          @RestParameter(name = "id", description = "ID of fex", isRequired = true, type = STRING) }, reponses = {
+  @RestQuery(
+        name = "getSbs",
+        description = "Returns sbs status of the fex",
+        returnDescription = "Returns sbs status of the fex",
+        pathParameters = {
+          @RestParameter(name = "id", description = "ID of fex", isRequired = true, type = STRING)
+        },
+        responses = {
           @RestResponse(responseCode = SC_OK, description = "The fex' sbs status"),
-          @RestResponse(responseCode = SC_NOT_FOUND, description = "Fex with specified ID does not exist") })
+          @RestResponse(responseCode = SC_NOT_FOUND, description = "Fex with specified ID does not exist")
+        }
+  )
   public Response getSbs(@PathParam("id") String fexId) {
     try {
       boolean sbs = fexService.isSbs(fexId);
@@ -256,10 +293,17 @@ public class FexRestService {
 
   @GET
   @Path("{id}/seriesId")
-  @RestQuery(name = "getSeriesId", description = "Returns series id of the fex", returnDescription = "Returns series id of the fex", pathParameters = {
-          @RestParameter(name = "id", description = "ID of fex", isRequired = true, type = STRING) }, reponses = {
+  @RestQuery(
+        name = "getSeriesId", description = "Returns series id of the fex",
+        returnDescription = "Returns series id of the fex",
+        pathParameters = {
+          @RestParameter(name = "id", description = "ID of fex", isRequired = true, type = STRING)
+        },
+        responses = {
           @RestResponse(responseCode = SC_OK, description = "The fex' series id"),
-          @RestResponse(responseCode = SC_NOT_FOUND, description = "Fex with specified ID does not exist") })
+          @RestResponse(responseCode = SC_NOT_FOUND, description = "Fex with specified ID does not exist")
+        }
+  )
   public Response getSeriesId(@PathParam("id") String fexId) {
     try {
       String seriesId = fexService.getFexSeriesId(fexId);
@@ -275,12 +319,23 @@ public class FexRestService {
 
   @POST
   @Path("/{fexId:.+}/receiver")
-  @RestQuery(name = "updateReceiver", description = "Update receiver of the fex", returnDescription = "No content.", restParameters = {
-          @RestParameter(name = "receiver", isRequired = true, description = "The receiver of the fex", type = STRING) }, pathParameters = {
-          @RestParameter(name = "fexId", isRequired = true, description = "The fex identifier", type = STRING) }, reponses = {
+  @RestQuery(
+        name = "updateReceiver",
+        description = "Update receiver of the fex",
+        returnDescription = "No content.",
+        restParameters = {
+          @RestParameter(name = "receiver", isRequired = true, description = "The receiver of the fex", type = STRING)
+        },
+        pathParameters = {
+          @RestParameter(name = "fexId", isRequired = true, description = "The fex identifier", type = STRING)
+        },
+        responses = {
           @RestResponse(responseCode = SC_NOT_FOUND, description = "No fex with this identifier was found."),
           @RestResponse(responseCode = SC_NO_CONTENT, description = "The receiver has been updated."),
-          @RestResponse(responseCode = SC_BAD_REQUEST, description = "The required path or form params were missing in the request.") })
+          @RestResponse(responseCode = SC_BAD_REQUEST, description = "The required path or form params were missing "
+                  + "in the request.")
+        }
+  )
   public Response updateReceiver(@PathParam("fexId") String fexId, @FormParam("receiver") String receiver) {
     if (receiver == null) {
       logger.warn("Receiver parameter is null.");
@@ -300,12 +355,23 @@ public class FexRestService {
 
   @POST
   @Path("/{fexId:.+}/lectureId")
-  @RestQuery(name = "updateLectureId", description = "Update lecture id of the fex", returnDescription = "No content.", restParameters = {
-          @RestParameter(name = "lectureId", isRequired = true, description = "The lectureId of the fex", type = STRING) }, pathParameters = {
-          @RestParameter(name = "fexId", isRequired = true, description = "The fex identifier", type = STRING) }, reponses = {
+  @RestQuery(
+        name = "updateLectureId",
+        description = "Update lecture id of the fex",
+        returnDescription = "No content.",
+        restParameters = {
+          @RestParameter(name = "lectureId", isRequired = true, description = "The lectureId of the fex", type = STRING)
+        },
+        pathParameters = {
+          @RestParameter(name = "fexId", isRequired = true, description = "The fex identifier", type = STRING)
+        },
+        responses = {
           @RestResponse(responseCode = SC_NOT_FOUND, description = "No fex with this identifier was found."),
           @RestResponse(responseCode = SC_NO_CONTENT, description = "The lecture id has been updated."),
-          @RestResponse(responseCode = SC_BAD_REQUEST, description = "The required path or form params were missing in the request.") })
+          @RestResponse(responseCode = SC_BAD_REQUEST, description = "The required path or form params were missing "
+                  + "in the request.")
+        }
+  )
   public Response updateLectureId(@PathParam("fexId") String fexId, @FormParam("lectureId") String lectureId) {
     if (lectureId == null) {
       logger.warn("Lecture id parameter is null.");
@@ -315,22 +381,33 @@ public class FexRestService {
       fexService.updateLectureId(fexId, lectureId);
       return Response.status(Response.Status.NO_CONTENT).build();
     } catch (NotFoundException e) {
-      logger.warn("Fex with ID {} does not exist");
+      logger.warn("Fex with ID {} does not exist", fexId);
       return Response.status(Response.Status.NOT_FOUND).build();
     } catch (Exception e) {
-      logger.warn("Unable to update lecture id of fex with id {}: {}");
+      logger.warn("Unable to update lecture id of fex with id {}: {}", fexId, lectureId);
       throw new WebApplicationException(Response.Status.INTERNAL_SERVER_ERROR);
     }
   }
 
   @POST
   @Path("/{fexId:.+}/seriesId")
-  @RestQuery(name = "updateSeriesId", description = "Update series id of the fex", returnDescription = "No content.", restParameters = {
-          @RestParameter(name = "seriesId", isRequired = true, description = "The seriesId of the fex", type = STRING) }, pathParameters = {
-          @RestParameter(name = "fexId", isRequired = true, description = "The fex identifier", type = STRING) }, reponses = {
+  @RestQuery(
+        name = "updateSeriesId",
+        description = "Update series id of the fex",
+        returnDescription = "No content.",
+        restParameters = {
+          @RestParameter(name = "seriesId", isRequired = true, description = "The seriesId of the fex", type = STRING)
+        },
+        pathParameters = {
+          @RestParameter(name = "fexId", isRequired = true, description = "The fex identifier", type = STRING)
+        },
+        responses = {
           @RestResponse(responseCode = SC_NOT_FOUND, description = "No fex with this identifier was found."),
           @RestResponse(responseCode = SC_NO_CONTENT, description = "The series id has been updated."),
-          @RestResponse(responseCode = SC_BAD_REQUEST, description = "The required path or form params were missing in the request.") })
+          @RestResponse(responseCode = SC_BAD_REQUEST, description = "The required path or form params were missing "
+                  + "in the request.")
+        }
+  )
   public Response updateSeriesId(@PathParam("fexId") String fexId, @FormParam("seriesId") String seriesId) {
     if (seriesId == null) {
       logger.warn("Series id parameter is null.");
@@ -340,22 +417,33 @@ public class FexRestService {
       fexService.updateSeriesId(fexId, seriesId);
       return Response.status(Response.Status.NO_CONTENT).build();
     } catch (NotFoundException e) {
-      logger.warn("Fex with ID {} does not exist");
+      logger.warn("Fex with ID {} does not exist", fexId);
       return Response.status(Response.Status.NOT_FOUND).build();
     } catch (Exception e) {
-      logger.warn("Unable to update series id of fex with id {}: {}");
+      logger.warn("Unable to update series id of fex with id {}: {}", fexId, seriesId);
       throw new WebApplicationException(Response.Status.INTERNAL_SERVER_ERROR);
     }
   }
 
   @POST
   @Path("/{fexId:.+}/sbs")
-  @RestQuery(name = "updateSbs", description = "Update sbs status of the fex", returnDescription = "No content.", restParameters = {
-          @RestParameter(name = "sbs", isRequired = true, description = "The sbs status of the fex", type = STRING) }, pathParameters = {
-          @RestParameter(name = "fexId", isRequired = true, description = "The fex identifier", type = STRING) }, reponses = {
+  @RestQuery(
+        name = "updateSbs",
+        description = "Update sbs status of the fex",
+        returnDescription = "No content.",
+        restParameters = {
+          @RestParameter(name = "sbs", isRequired = true, description = "The sbs status of the fex", type = STRING)
+        },
+        pathParameters = {
+          @RestParameter(name = "fexId", isRequired = true, description = "The fex identifier", type = STRING)
+        },
+        responses = {
           @RestResponse(responseCode = SC_NOT_FOUND, description = "No fex with this identifier was found."),
           @RestResponse(responseCode = SC_NO_CONTENT, description = "The sbs status has been updated."),
-          @RestResponse(responseCode = SC_BAD_REQUEST, description = "The required path or form params were missing in the request.") })
+          @RestResponse(responseCode = SC_BAD_REQUEST, description = "The required path or form params were missing "
+                  + "in the request.")
+        }
+  )
   public Response updateSbs(@PathParam("fexId") String fexId, @FormParam("sbs") boolean sbs) {
     try {
       fexService.updateIsSbsStatus(fexId, sbs);
@@ -371,10 +459,18 @@ public class FexRestService {
 
   @DELETE
   @Path("/{fexId:.+}")
-  @RestQuery(name = "delete", description = "Delete a fex", returnDescription = "No content.", pathParameters = {
-          @RestParameter(name = "fexId", isRequired = true, description = "The fex identifier", type = STRING) }, reponses = {
+  @RestQuery(
+        name = "delete",
+        description = "Delete a fex",
+        returnDescription = "No content.",
+        pathParameters = {
+          @RestParameter(name = "fexId", isRequired = true, description = "The fex identifier", type = STRING)
+        },
+        responses = {
           @RestResponse(responseCode = SC_NOT_FOUND, description = "No fex with this identifier was found."),
-          @RestResponse(responseCode = SC_NO_CONTENT, description = "The fex was deleted.") })
+          @RestResponse(responseCode = SC_NO_CONTENT, description = "The fex was deleted.")
+        }
+  )
   public Response deleteSeries(@PathParam("fexId") String fexId) {
     try {
       fexService.deleteFex(fexId);
@@ -391,8 +487,14 @@ public class FexRestService {
   @GET
   @Produces(MediaType.TEXT_PLAIN)
   @Path("/count")
-  @RestQuery(name = "count", description = "Returns the number of fex", returnDescription = "number of fex", reponses = {
-          @RestResponse(responseCode = SC_OK, description = "The number of fex") })
+  @RestQuery(
+        name = "count",
+        description = "Returns the number of fex",
+        returnDescription = "number of fex",
+        responses = {
+          @RestResponse(responseCode = SC_OK, description = "The number of fex")
+        }
+  )
   public Response getCount() {
     try {
       int count = fexService.countFex();
@@ -405,10 +507,19 @@ public class FexRestService {
 
   @POST
   @Path("/")
-  @RestQuery(name = "addFex", description = "Adds a Fex", returnDescription = "No content.", restParameters = {
-          @RestParameter(name = "fex", isRequired = true, description = "The fex document", type = TEXT) }, reponses = {
-          @RestResponse(responseCode = SC_BAD_REQUEST, description = "The required form params were missing in the request."),
-          @RestResponse(responseCode = SC_CREATED, description = "The Fex has been created.") })
+  @RestQuery(
+        name = "addFex",
+        description = "Adds a Fex",
+        returnDescription = "No content.",
+        restParameters = {
+          @RestParameter(name = "fex", isRequired = true, description = "The fex document", type = TEXT)
+        },
+        responses = {
+          @RestResponse(responseCode = SC_BAD_REQUEST, description = "The required form params were missing "
+                  + "in the request."),
+          @RestResponse(responseCode = SC_CREATED, description = "The Fex has been created.")
+        }
+  )
   public Response addFex(@FormParam("fex") String fex) {
     if (fex == null) {
       logger.warn("ID of Fex that should be added is null");
