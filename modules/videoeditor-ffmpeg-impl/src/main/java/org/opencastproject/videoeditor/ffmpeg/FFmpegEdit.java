@@ -54,6 +54,7 @@ public class FFmpegEdit {
   private static final String CONFIG_FFMPEG_PATH = "org.opencastproject.composer.ffmpeg.path";
 
   private static final String DEFAULT_FFMPEG_PROPERTIES = "-preset faster -crf 18";
+  private static final String DEFAULT_FFMPEG_OUTPUT_PROPERTIES = "";
   private static final String DEFAULT_AUDIO_FADE = "0.2";
   private static final String DEFAULT_VIDEO_FADE = "0.2";
   private static String binary = FFMPEG_BINARY_DEFAULT;
@@ -61,6 +62,7 @@ public class FFmpegEdit {
   protected float vfade;
   protected float afade;
   protected String ffmpegProperties = DEFAULT_FFMPEG_PROPERTIES;
+  protected String ffmpegOutputProperties = DEFAULT_FFMPEG_OUTPUT_PROPERTIES;
   protected String ffmpegScaleFilter = null;
   protected String videoCodec = null;  // By default, use the same codec as source
   protected String audioCodec = null;
@@ -77,6 +79,7 @@ public class FFmpegEdit {
     this.afade = Float.parseFloat(DEFAULT_AUDIO_FADE);
     this.vfade = Float.parseFloat(DEFAULT_VIDEO_FADE);
     this.ffmpegProperties = DEFAULT_FFMPEG_PROPERTIES;
+    this.ffmpegOutputProperties = DEFAULT_FFMPEG_OUTPUT_PROPERTIES;
   }
 
   /*
@@ -88,6 +91,8 @@ public class FFmpegEdit {
     fade = properties.getProperty(VideoEditorProperties.VIDEO_FADE, DEFAULT_VIDEO_FADE);
     this.vfade = Float.parseFloat(fade);
     this.ffmpegProperties = properties.getProperty(VideoEditorProperties.FFMPEG_PROPERTIES, DEFAULT_FFMPEG_PROPERTIES);
+    this.ffmpegOutputProperties = properties.getProperty(VideoEditorProperties.FFMPEG_OUTPUT_PROPERTIES,
+            DEFAULT_FFMPEG_OUTPUT_PROPERTIES);
     this.ffmpegScaleFilter = properties.getProperty(VideoEditorProperties.FFMPEG_SCALE_FILTER, null);
     this.videoCodec = properties.getProperty(VideoEditorProperties.VIDEO_CODEC, null);
     this.audioCodec = properties.getProperty(VideoEditorProperties.AUDIO_CODEC, null);
@@ -264,6 +269,10 @@ public class FFmpegEdit {
     if (hasAudio && audioCodec != null) {
       command.add("-c:a");
       command.add(audioCodec);
+    }
+    if (!StringUtils.isBlank(ffmpegOutputProperties)) {
+      String[] outputOptions = ffmpegOutputProperties.split(" ");
+      command.addAll(Arrays.asList(outputOptions));
     }
     command.add(dest);
 
