@@ -4,6 +4,108 @@ Changelog
 Opencast 13
 -----------
 
+### Opencast 13.6
+
+*Released on Mai 26th, 2023*
+
+- [[#4961](https://github.com/opencast/opencast/pull/4961)] -
+  Remove empty options in ACL template select (#4910)
+- [[#4925](https://github.com/opencast/opencast/pull/4925)] -
+  Ensure all plugin jars are present in tarballs.
+- [[#4923](https://github.com/opencast/opencast/pull/4923)] -
+  Mitigate not loading ACLs
+- [[#4920](https://github.com/opencast/opencast/pull/4920)] -
+  Batch Dependabot Updates for Paella 7
+- [[#4890](https://github.com/opencast/opencast/pull/4890)] -
+  Bump eslint from 8.37.0 to 8.39.0 in /modules/engage-paella-player-7
+- [[#4885](https://github.com/opencast/opencast/pull/4885)] -
+  Bump html-validate from 7.14.0 to 7.15.1 in /modules/engage-paella-player-7
+- [[#4879](https://github.com/opencast/opencast/pull/4879)] -
+  Editor Release 2023-04-20
+- [[#4870](https://github.com/opencast/opencast/pull/4870)] -
+  TermsFeed Cookie Consent NOTICE
+- [[#4869](https://github.com/opencast/opencast/pull/4869)] -
+  [Whisper] Fixes automatic language detection
+- [[#4868](https://github.com/opencast/opencast/pull/4868)] -
+  Extend configuration options of Amberscript integration
+- [[#4864](https://github.com/opencast/opencast/pull/4864)] -
+  Remove dead `CONFIG_OPTIONS` from WOHs
+- [[#4853](https://github.com/opencast/opencast/pull/4853)] -
+  Bump webpack from 5.77.0 to 5.78.0 in /modules/engage-paella-player-7
+- [[#4851](https://github.com/opencast/opencast/pull/4851)] -
+  Bump paella-zoom-plugin from 1.2.1 to 1.27.0 in /modules/engage-paella-player-7
+
+### Opencast 13.5
+
+*Released on April 19th, 2023*
+
+- [[#4866](https://github.com/opencast/opencast/pull/4866)] -
+  Add Opencast 13.5 release notes
+- [[#4843](https://github.com/opencast/opencast/pull/4843)] -
+  Fixed pagination when reindexing asset manager
+- [[#4824](https://github.com/opencast/opencast/pull/4824)] -
+  Bump @babel/preset-env from 7.20.2 to 7.21.4 in /modules/engage-paella-player-7
+- [[#4823](https://github.com/opencast/opencast/pull/4823)] -
+  Batch Dependabot Updates for Paella 7
+- [[#4813](https://github.com/opencast/opencast/pull/4813)] -
+  Bump html-validate from 7.13.3 to 7.14.0 in /modules/engage-paella-player-7
+- [[#4782](https://github.com/opencast/opencast/pull/4782)] -
+  Paella 7: Allow to disable the cookie consent banner
+- [[#4772](https://github.com/opencast/opencast/pull/4772)] -
+  Batch Dependabot Updates for Paella 7
+- [[#4770](https://github.com/opencast/opencast/pull/4770)] -
+  Whisper language detection and tagging
+- [[#4738](https://github.com/opencast/opencast/pull/4738)] -
+  Enable Whisper English Translation
+
+### Opencast 13.4
+
+*Released on March 21th, 2023*
+
+- [[#4780](https://github.com/opencast/opencast/pull/4780)] -
+  Bump @babel/eslint-parser from 7.19.1 to 7.21.3 in /modules/engage-paella-player-7
+
+### Opencast 13.3
+
+*Released on March 16th, 2023*
+
+- [[#4783](https://github.com/opencast/opencast/pull/4783)] -
+  Add paging to asset manager index rebuild
+- [[#4758](https://github.com/opencast/opencast/pull/4758)] -
+  Add Opencast 13.3 release notes
+- [[#4756](https://github.com/opencast/opencast/pull/4756)] -
+  Batch Dependabot Updates for Paella 7
+- [[#4753](https://github.com/opencast/opencast/pull/4753)] -
+  Bump paella-core from 1.20.2 to 1.22.1 in /modules/engage-paella-player-7
+- [[#4740](https://github.com/opencast/opencast/pull/4740)] -
+  Fix reindex of multi-tanant systems
+- [[#4739](https://github.com/opencast/opencast/pull/4739)] -
+  Fix exception when retrieving comments where the author is missing
+- [[#4734](https://github.com/opencast/opencast/pull/4734)] -
+  Batch Dependabot Updates for Paella 7
+- [[#4722](https://github.com/opencast/opencast/pull/4722)] -
+  Paella 7 matomo plugin
+- [[#4719](https://github.com/opencast/opencast/pull/4719)] -
+  Bump eslint from 8.34.0 to 8.35.0 in /modules/engage-paella-player-7
+- [[#4717](https://github.com/opencast/opencast/pull/4717)] -
+  Shows event Title on Paella 7 browser tab
+- [[#4713](https://github.com/opencast/opencast/pull/4713)] -
+  Bump paella-core from 1.20.0 to 1.20.2 in /modules/engage-paella-player-7
+- [[#4707](https://github.com/opencast/opencast/pull/4707)] -
+  Dependabot-batcher update
+- [[#4706](https://github.com/opencast/opencast/pull/4706)] -
+  Bump @babel/core from 7.20.12 to 7.21.0 in /modules/engage-paella-player-7
+- [[#4705](https://github.com/opencast/opencast/pull/4705)] -
+  Bump paella-core from 1.16.0 to 1.20.0 in /modules/engage-paella-player-7
+- [[#4690](https://github.com/opencast/opencast/pull/4690)] -
+  Add Opencast 13.2 release notes
+- [[#4688](https://github.com/opencast/opencast/pull/4688)] -
+  Bump paella-basic-plugins from 1.8.4 to 1.18.0 in /modules/engage-paella-player-7
+- [[#4683](https://github.com/opencast/opencast/pull/4683)] -
+  Fix typo and adds recomendations to whisper doc
+- [[#4515](https://github.com/opencast/opencast/pull/4515)] -
+  Allow hotkeys in create dialogs in input elements
+
 ### Opencast 13.2
 
 *Released on February 15th, 2023*
@@ -629,6 +731,41 @@ Opencast 13
 
 Opencast 12
 -----------
+
+### Opencast 12.11
+
+*Released on May 16th, 2023*
+
+- [[#4929](https://github.com/opencast/opencast/pull/4929)] -
+  Fix template losing user role when creating an event in the admin ui
+- [[#4877](https://github.com/opencast/opencast/pull/4877)] -
+  Engage UI docs
+- [[#4874](https://github.com/opencast/opencast/pull/4874)] -
+  Upload Allinone as Actions Workflow Artifact
+- [[#4872](https://github.com/opencast/opencast/pull/4872)] -
+  Fixing adopter statistics data gathering
+- [[#4863](https://github.com/opencast/opencast/pull/4863)] -
+  Fixed long WF description 11_to_12 DB upgrade script bug for Maria and PSQL
+- [[#4862](https://github.com/opencast/opencast/pull/4862)] -
+  Serviceregistry activatation optimization
+- [[#4848](https://github.com/opencast/opencast/pull/4848)] -
+  Service statistics DB query optimazation
+
+### Opencast 12.10
+
+*Released on March 27th, 2023*
+
+- [[#4799](https://github.com/opencast/opencast/pull/4799)] -
+  Sets values in specific config file to default
+
+### Opencast 12.9
+
+*Released on March 16th, 2023*
+
+- [[#4764](https://github.com/opencast/opencast/pull/4764)] -
+  Editor remote enforce charset for StringEntity
+- [[#4757](https://github.com/opencast/opencast/pull/4757)] -
+  added missing publish-uploaded-assets.xml workflow
 
 ### Opencast 12.8
 
