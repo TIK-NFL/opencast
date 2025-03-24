@@ -111,7 +111,7 @@ public class UIConfigRest {
   /**
    * OSGI callback for activating this component
    *
-   * @param cc
+   * @param context
    *          the osgi component context
    */
   @Activate

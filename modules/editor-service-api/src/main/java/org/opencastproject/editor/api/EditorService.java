@@ -45,7 +45,6 @@ public interface EditorService {
    * Create or refresh lock for the mediapackage
    * @param mediaPackageId
    * @param lockData identify the owner of the lock
-   * @return lock state
    * @throws EditorServiceException if invalid mediapackge or locked by other
    */
   void  lockMediaPackage(String mediaPackageId, LockData lockData) throws EditorServiceException;
@@ -54,7 +53,6 @@ public interface EditorService {
    * Remove lock for the mediapackage
    * @param mediaPackageId
    * @param lockData identify the owner of the lock
-   * @return lock state
    * @throws EditorServiceException if invalid mediapackge or locked by other
    */
   void unlockMediaPackage(String mediaPackageId, LockData lockData) throws EditorServiceException;

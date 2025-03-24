@@ -1380,7 +1380,7 @@ public class WorkflowServiceImpl extends AbstractIndexProducer implements Workfl
    *
    * @param workflow
    *          the workflow instance
-   * @param operation
+   * @param currentOperation
    *          the current workflow operation
    * @return the workflow instance
    */

@@ -131,7 +131,8 @@ public final class SearchServiceImpl extends AbstractJobProducer implements Sear
 
   private final LoadingCache<Tuple<User, String>, Boolean> cache;
 
-  private static final Pattern staticFilePattern = Pattern.compile("^/([^/]+)/engage-player/([^/]+)/.*$");
+  private static final Pattern staticFilePattern =
+      Pattern.compile("^/([^/]+)/(?:engage-player|engage-live)/([^/]+)/.*$");
 
   /**
    * Creates a new instance of the search service.

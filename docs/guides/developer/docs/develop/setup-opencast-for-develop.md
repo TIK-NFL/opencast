@@ -119,7 +119,6 @@ The procedure would be as follows:
 
 - Start Opencast and use `la -u` in the Karaf console to list all installed bundles/modules. Note down the IDs of the
   bundles you want to watch.
-<<<<<<< HEAD
 - Use `bundle:watch IDs` to watch the desired modules, e.g. `bundle:watch 190 199`
 - Make your changes and rebuild the module (e.g. execute `./mvnw clean install` in the module folder).
 - Watch how Karaf automatically redeploys the changed jars from your local Maven repository. You can verify that
@@ -142,8 +141,8 @@ correctly be restored after the new bundle has been deployed.
 Building with multiple threads decreases the build time significantly.
 If you want to enable multiple threads, you can use the following command:
 
-    $ ./mvnw clean install -T 1.0C -DskipTests -Pnone 
-    && cd assemblies && ./mvnw install -T 1.0C -Dskiptests -Pdev  
+    $ ./mvnw clean install -T 1.0C -DskipTests -Pnone
+    && cd assemblies && ./mvnw install -T 1.0C -Dskiptests -Pdev
     && cd ..
     $ ./build/opencast-dist-develop-*/start-opencast
 

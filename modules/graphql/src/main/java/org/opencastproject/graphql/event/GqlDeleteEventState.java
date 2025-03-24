@@ -19,5 +19,14 @@
  *
  */
 
-package org.opencastproject.statistics.export;
+package org.opencastproject.graphql.event;
 
+import graphql.annotations.annotationTypes.GraphQLName;
+
+@GraphQLName(GqlDeleteEventState.TYPE_NAME)
+public enum GqlDeleteEventState  {
+  SUCCESS,
+  RETRACTING,
+  FAILED;
+  public static final String TYPE_NAME = "DeleteEventState";
+}
