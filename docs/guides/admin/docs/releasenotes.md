@@ -1,5 +1,19 @@
 # Opencast 17: Release Notes
 
+## Opencast 17.5
+
+This release contains quite a few bug fixes and other improvements, most
+importantly a security fix for the paella player ([#6783](https://github.com/opencast/opencast/pull/6783))
+and a bugfix for jwt tokens ([#6791](https://github.com/opencast/opencast/pull/6791)).
+
+There are also new releases for both the admin ui
+([2025-06-27](https://github.com/opencast/opencast-admin-interface/releases/tag/2025-06-27)) and the editor
+([2025-06-19](https://github.com/opencast/opencast-editor/releases/tag/2025-06-19), but also see the release notes for
+[2025-06-18](https://github.com/opencast/opencast-editor/releases/tag/2025-06-18)), respectively.
+
+Additionally there is a minor change to the community workflows that should
+only affect adopters who ingest more than two streams ([#6728](https://github.com/opencast/opencast/pull/6728)).
+
 ## Opencast 17.4
 
 This release contains a few bug fixes and enhancements of existing features. Among others, it enables the use of
@@ -86,8 +100,8 @@ configure asset upload options in more detail [[#6362](https://github.com/openca
 - Waveform peaks are now more visible, but that behavior is configurable.
   [[#6028](https://github.com/opencast/opencast/pull/6028)]
 
-For more details, please take a look at the [full changelog](changelog.md). If you want to update Opencast from a
-previous version, you should also read the [upgrade guide](upgrade.md).
+For more details, please take a look at the [full changelog](changelog/opencast-{{ opencast_major_version() }}.md).
+If you want to update Opencast from a previous version, you should also read the [upgrade guide](upgrade.md).
 
 
 ## Release Schedule
