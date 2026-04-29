@@ -760,7 +760,8 @@ public class AwsS3DistributionServiceImpl extends AbstractDistributionService
    */
   protected URI getDistributionUri(String objectName) throws URISyntaxException {
     // Something like https://OPENCAST_DOWNLOAD_URL/ORG_ID/CHANNEL_ID/MP_ID/ELEMENT_ID/FILE_NAME.EXTENSION
-    return new URI(opencastDistributionUrl + objectName);
+    String orgId = securityService.getOrganization().getId();
+    return new URI(opencastDistributionUrl + getBucketName(orgId) + "/" + objectName);
   }
 
   /**
@@ -771,10 +772,12 @@ public class AwsS3DistributionServiceImpl extends AbstractDistributionService
   protected String getDistributedObjectName(MediaPackageElement element) {
     // Something like https://OPENCAST_DOWNLOAD_URL/ORG_ID/CHANNEL_ID/MP_ID/ORIGINAL_ELEMENT_ID/FILE_NAME.EXTENSION
     String uriString = element.getURI().toString();
+    String orgId = securityService.getOrganization().getId();
+    String opencastDistributionBucketUrl = opencastDistributionUrl + getBucketName(orgId) + "/";
 
-    // String directoryName = distributionDirectory.getAbsolutePath();
-    if (uriString.startsWith(opencastDistributionUrl) && uriString.length() > opencastDistributionUrl.length()) {
-      return uriString.substring(opencastDistributionUrl.length());
+    if (uriString.startsWith(opencastDistributionBucketUrl)
+            && uriString.length() > opencastDistributionBucketUrl.length()) {
+      return uriString.substring(opencastDistributionBucketUrl.length());
     } else {
       // Cannot retract
       logger.warn(

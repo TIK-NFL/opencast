@@ -248,8 +248,8 @@ public class AwsS3DistributionServiceImplTest {
     MediaPackageElement mpe = mpes[0];
 
     Assert.assertEquals(new URI(
-        "http://XYZ.cloudfront.net/" + defaultOrganization.getId() + "/channelId/efd6e4df-63b6-49af-be5f-15f598778877/"
-            + "presenter-delivery/video-presenter-delivery.mp4"),
+        "http://XYZ.cloudfront.net/aws-bucket/" + defaultOrganization.getId()
+                + "/channelId/efd6e4df-63b6-49af-be5f-15f598778877/presenter-delivery/video-presenter-delivery.mp4"),
         mpe.getURI());
   }
 
@@ -290,7 +290,7 @@ public class AwsS3DistributionServiceImplTest {
     MediaPackageElement mpe = mpes[0];
 
     Assert.assertEquals(new URI(
-        "http://XYZ.cloudfront.net/"
+        "http://XYZ.cloudfront.net/aws-bucket/"
             + defaultOrganization.getId()
             + "/channelId/efd6e4df-63b6-49af-be5f-15f598778877/"
             + "presenter-mp4/video-presenter-delivery.mp4"),
@@ -312,8 +312,8 @@ public class AwsS3DistributionServiceImplTest {
   @Test
   public void testGetDistributionUri() throws Exception {
     Assert.assertEquals(new URI(
-        "http://XYZ.cloudfront.net/" + defaultOrganization.getId() + "/channelId/efd6e4df-63b6-49af-be5f-15f598778877/"
-            + "presenter-delivery/video-presenter-delivery.mp4"),
+        "http://XYZ.cloudfront.net/aws-bucket/" + defaultOrganization.getId()
+            + "/channelId/efd6e4df-63b6-49af-be5f-15f598778877/presenter-delivery/video-presenter-delivery.mp4"),
         service.getDistributionUri(defaultOrganization.getId() + "/channelId/efd6e4df-63b6-49af-be5f-15f598778877/"
             + "presenter-delivery/video-presenter-delivery.mp4"));
   }
